@@ -69,6 +69,70 @@ object StationRepository {
                 "&order=clickcount&reverse=true&limit=10000"
         return request(path, "India")
     }
+    suspend fun fetchDirectory(): List<FmEntry> = withContext(Dispatchers.IO) {
+        try {
+            val address = "https://raw.githubusercontent.com/gadagojuanilkumar/" +
+                    "FM-Radio-India-AK/main/data/fm_directory.json"
+            val connection = URL(address).openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000
+            connection.readTimeout = 30000
+            connection.setRequestProperty("User-Agent", "FMRadioIndiaAK/1.0")
+            val text = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            val array = JSONArray(text)
+            val list = mutableListOf<FmEntry>()
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                list.add(
+                    FmEntry(
+                        state = item.optString("state"),
+                        city = item.optString("city"),
+                        frequency = item.optString("frequency"),
+                        name = item.optString("name"),
+                        remarks = item.optString("remarks"),
+                        streamUrl = item.optString("streamUrl"),
+                        streamName = item.optString("streamName")
+                    )
+                )
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun findStream(entry: FmEntry): Station? {
+        val isAir = entry.name.equals("Akashvani", ignoreCase = true)
+        val city = entry.city.substringBefore("(").trim()
+        val queries = (if (isAir) listOf(city) else listOf(entry.name, city))
+            .filter { it.isNotBlank() }
+
+        var best: Station? = null
+        var bestScore = 0
+        for (query in queries) {
+            for (s in searchByName(query)) {
+                val n = s.name.lowercase()
+                var score = 0
+                if (n.contains(entry.frequency)) score += 3
+                val nameMatch = if (isAir) {
+                    n.contains("akashvani") || n.contains("all india radio") ||
+                            Regex("\\bair\\b").containsMatchIn(n)
+                } else {
+                    n.contains(entry.name.lowercase())
+                }
+                if (nameMatch) score += 2
+                if (city.isNotBlank() && n.contains(city.lowercase())) score += 2
+                if (s.state.equals(entry.state, ignoreCase = true)) score += 1
+                if (score > bestScore) {
+                    best = s
+                    bestScore = score
+                }
+            }
+            if (bestScore >= 4) break
+        }
+        return if (bestScore >= 4) best else null
+    }
     private suspend fun request(path: String, fallbackState: String): List<Station> =
         withContext(Dispatchers.IO) {
             for (server in servers) {

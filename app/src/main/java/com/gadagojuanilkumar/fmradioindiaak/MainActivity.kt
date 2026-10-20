@@ -39,6 +39,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Switch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -79,6 +83,15 @@ fun RadioScreen() {
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var searchText by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
+    var showDirectory by remember { mutableStateOf(false) }
+    var directory by remember { mutableStateOf<List<FmEntry>>(emptyList()) }
+    var directoryLoading by remember { mutableStateOf(false) }
+    var directoryState by remember { mutableStateOf("Telangana") }
+    var directoryMenuOpen by remember { mutableStateOf(false) }
+    var directoryQuery by remember { mutableStateOf("") }
+    var directoryMessage by remember { mutableStateOf("") }
+    var onlineOnly by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -96,11 +109,13 @@ fun RadioScreen() {
         future.addListener({
             val c = future.get()
             c.addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(playing: Boolean) {
-                    isPlaying = playing
+                override fun onEvents(player: Player, events: Player.Events) {
+                    isPlaying = player.playWhenReady &&
+                            player.playbackState != Player.STATE_IDLE &&
+                            player.playbackState != Player.STATE_ENDED
                 }
             })
-            isPlaying = c.isPlaying
+            isPlaying = c.playWhenReady
             controller = c
         }, MoreExecutors.directExecutor())
         onDispose { MediaController.releaseFuture(future) }
@@ -150,8 +165,44 @@ fun RadioScreen() {
         play(stations[newIndex])
     }
 
+    LaunchedEffect(showDirectory) {
+        if (showDirectory && directory.isEmpty()) {
+            directoryLoading = true
+            directory = StationRepository.fetchDirectory()
+            directoryLoading = false
+            if (directory.isEmpty()) {
+                directoryMessage = "Could not load the FM list. Check your internet."
+            }
+        }
+    }
+
+    fun playFromDirectory(entry: FmEntry) {
+        if (entry.streamUrl.isBlank()) {
+            directoryMessage = "No online stream for ${entry.name} " +
+                    "${entry.frequency} (${entry.city})"
+            return
+        }
+        directoryMessage = "Playing ${entry.streamName.ifBlank { entry.name }}"
+        play(
+            Station(
+                id = "fm-${entry.city}-${entry.frequency}",
+                name = "${entry.name} ${entry.frequency} ${entry.city}",
+                state = entry.state,
+                streamUrl = entry.streamUrl
+            )
+        )
+    }
     Scaffold(
-        topBar = { TopAppBar(title = { Text("FM Radio India (AK)") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("FM Radio India (AK)") },
+                actions = {
+                    TextButton(onClick = { showDirectory = !showDirectory }) {
+                        Text(if (showDirectory) "Stations" else "FM Directory")
+                    }
+                }
+            )
+        },
         bottomBar = {
             Surface(tonalElevation = 3.dp) {
                 Column(
@@ -179,7 +230,7 @@ fun RadioScreen() {
                             onClick = {
                                 val c = controller
                                 if (c != null) {
-                                    if (c.isPlaying) c.pause() else c.play()
+                                    if (c.playWhenReady) c.pause() else c.play()
                                 }
                             }
                         ) { Text(if (isPlaying) "Pause" else "Play") }
@@ -192,6 +243,107 @@ fun RadioScreen() {
             }
         }
     ) { padding ->
+        if (showDirectory) {
+            val states = listOf("All India") +
+                    directory.map { it.state }.distinct().sorted()
+            val q = directoryQuery.trim()
+            val shown = directory.filter { e ->
+                (!onlineOnly || e.streamUrl.isNotBlank()) &&
+                (directoryState == "All India" ||
+                        e.state.equals(directoryState, ignoreCase = true)) &&
+                        (q.isBlank() ||
+                                e.city.contains(q, ignoreCase = true) ||
+                                e.name.contains(q, ignoreCase = true) ||
+                                e.remarks.contains(q, ignoreCase = true) ||
+                                e.frequency.contains(q))
+            }
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+            ) {
+                Box(modifier = Modifier.padding(12.dp)) {
+                    OutlinedButton(onClick = { directoryMenuOpen = true }) {
+                        Text("State: $directoryState")
+                    }
+                    DropdownMenu(
+                        expanded = directoryMenuOpen,
+                        onDismissRequest = { directoryMenuOpen = false }
+                    ) {
+                        states.forEach { s ->
+                            DropdownMenuItem(
+                                text = { Text(s) },
+                                onClick = {
+                                    directoryState = s
+                                    directoryMenuOpen = false
+                                }
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = directoryQuery,
+                    onValueChange = { directoryQuery = it },
+                    label = { Text("City, name or frequency") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Online only (can play)")
+                    Switch(checked = onlineOnly, onCheckedChange = { onlineOnly = it })
+                }
+                if (directoryMessage.isNotBlank()) {
+                    Text(
+                        text = directoryMessage,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+                if (directoryLoading) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(shown) { e ->
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { playFromDirectory(e) }
+                                    .padding(16.dp)
+                            ) {
+                                Text(
+                                    text = "${e.frequency} MHz  ${e.name}" +
+                                            if (e.streamUrl.isNotBlank()) "   (Online)" else "",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = e.city + if (e.remarks.isNotBlank()) {
+                                        " - " + e.remarks
+                                    } else {
+                                        ""
+                                    },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
+            return@Scaffold
+        }
         Column(
             modifier = Modifier
                 .padding(padding)
