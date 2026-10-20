@@ -91,6 +91,8 @@ fun RadioScreen() {
     var directoryQuery by remember { mutableStateOf("") }
     var directoryMessage by remember { mutableStateOf("") }
     var onlineOnly by remember { mutableStateOf(false) }
+    var selectedLanguage by remember { mutableStateOf("All languages") }
+    var languageMenuOpen by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -135,14 +137,22 @@ fun RadioScreen() {
         loading = false
     }
 
+    val languages = listOf(
+        "All languages", "Telugu", "Hindi", "Tamil", "Kannada", "Malayalam",
+        "Punjabi", "Bengali", "Marathi", "Odia", "Urdu", "English", "Bhojpuri"
+    )
     val stations = allStations.filter { s ->
         val query = searchQuery.trim()
-        if (query.isNotBlank()) {
+        val languageOk = selectedLanguage == "All languages" ||
+                s.language.contains(selectedLanguage, ignoreCase = true) ||
+                (selectedLanguage == "Bengali" && s.language.contains("bangla", ignoreCase = true))
+        val textOrStateOk = if (query.isNotBlank()) {
             s.name.contains(query, ignoreCase = true)
         } else {
             selectedState == "All India" ||
                     s.state.equals(selectedState, ignoreCase = true)
         }
+        languageOk && textOrStateOk
     }
 
     fun play(station: Station) {
@@ -391,6 +401,25 @@ fun RadioScreen() {
                     onClick = { searchQuery = searchText.trim() },
                     modifier = Modifier.padding(start = 8.dp)
                 ) { Text("Search") }
+            }
+            Box(modifier = Modifier.padding(horizontal = 12.dp)) {
+                OutlinedButton(onClick = { languageMenuOpen = true }) {
+                    Text("Language: $selectedLanguage")
+                }
+                DropdownMenu(
+                    expanded = languageMenuOpen,
+                    onDismissRequest = { languageMenuOpen = false }
+                ) {
+                    languages.forEach { l ->
+                        DropdownMenuItem(
+                            text = { Text(l) },
+                            onClick = {
+                                selectedLanguage = l
+                                languageMenuOpen = false
+                            }
+                        )
+                    }
+                }
             }
             if (loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

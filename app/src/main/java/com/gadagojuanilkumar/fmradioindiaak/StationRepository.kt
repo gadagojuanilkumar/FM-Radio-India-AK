@@ -187,7 +187,8 @@ object StationRepository {
                     name = name,
                     state = item.optString("state").ifBlank { fallbackState },
                     streamUrl = url,
-                    logoUrl = item.optString("favicon")
+                    logoUrl = item.optString("favicon"),
+                    language = item.optString("language")
                 )
             )
         }

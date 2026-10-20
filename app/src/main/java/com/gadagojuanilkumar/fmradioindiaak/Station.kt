@@ -5,5 +5,6 @@ data class Station(
     val name: String,
     val state: String,
     val streamUrl: String,
-    val logoUrl: String = ""
+    val logoUrl: String = "",
+    val language: String = ""
 )
