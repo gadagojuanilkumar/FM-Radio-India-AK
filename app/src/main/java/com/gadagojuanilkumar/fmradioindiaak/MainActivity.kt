@@ -125,7 +125,13 @@ fun RadioScreen() {
         loading = true
         val customJob = async { StationRepository.fetchCustom() }
         val apiJob = async { StationRepository.fetchAllIndia() }
-        allStations = customJob.await() + apiJob.await()
+        val fixJob = async { StationRepository.fetchStateFixes() }
+        val fixes = fixJob.await()
+        val api = apiJob.await().map { s ->
+            val fixed = fixes[s.id]
+            if (s.state == "India" && fixed != null) s.copy(state = fixed) else s
+        }
+        allStations = customJob.await() + api
         loading = false
     }
 

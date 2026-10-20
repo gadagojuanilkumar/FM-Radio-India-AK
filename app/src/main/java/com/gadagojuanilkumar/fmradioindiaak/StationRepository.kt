@@ -6,6 +6,7 @@ import java.net.URLEncoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONObject
 
 object StationRepository {
 
@@ -68,6 +69,27 @@ object StationRepository {
         val path = "/json/stations/search?countrycode=IN&hidebroken=true" +
                 "&order=clickcount&reverse=true&limit=10000"
         return request(path, "India")
+    }
+    suspend fun fetchStateFixes(): Map<String, String> = withContext(Dispatchers.IO) {
+        try {
+            val address = "https://raw.githubusercontent.com/gadagojuanilkumar/" +
+                    "FM-Radio-India-AK/main/data/state_fix.json"
+            val connection = URL(address).openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000
+            connection.readTimeout = 15000
+            connection.setRequestProperty("User-Agent", "FMRadioIndiaAK/1.0")
+            val text = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            val obj = JSONObject(text)
+            val map = mutableMapOf<String, String>()
+            for (key in obj.keys()) {
+                map[key] = obj.getString(key)
+            }
+            map
+        } catch (e: Exception) {
+            emptyMap()
+        }
     }
     suspend fun fetchDirectory(): List<FmEntry> = withContext(Dispatchers.IO) {
         try {
