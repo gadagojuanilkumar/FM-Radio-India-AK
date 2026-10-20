@@ -1,1 +1,9 @@
-
+[
+  {
+    "id": "my-001",
+    "name": "My Sample Station",
+    "state": "Telangana",
+    "streamUrl": "https://example.com/replace-with-real-stream",
+    "logoUrl": ""
+  }
+]
