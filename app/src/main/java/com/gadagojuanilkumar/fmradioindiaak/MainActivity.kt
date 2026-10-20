@@ -73,7 +73,7 @@ fun RadioScreen() {
     var selectedState by remember { mutableStateOf("Telangana") }
     var menuOpen by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
-    var stations by remember { mutableStateOf<List<Station>>(emptyList()) }
+    var allStations by remember { mutableStateOf<List<Station>>(emptyList()) }
     var currentStation by remember { mutableStateOf<Station?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
     var controller by remember { mutableStateOf<MediaController?>(null) }
@@ -106,24 +106,22 @@ fun RadioScreen() {
         onDispose { MediaController.releaseFuture(future) }
     }
 
-    LaunchedEffect(selectedState, searchQuery) {
+    LaunchedEffect(Unit) {
         loading = true
         val customJob = async { StationRepository.fetchCustom() }
-        val apiJob = async {
-            if (searchQuery.isBlank()) {
-                StationRepository.fetchByState(selectedState)
-            } else {
-                StationRepository.searchByName(searchQuery)
-            }
-        }
-        val custom = customJob.await()
-        val api = apiJob.await()
-        stations = if (searchQuery.isBlank()) {
-            custom.filter { it.state.equals(selectedState, ignoreCase = true) } + api
-        } else {
-            custom.filter { it.name.contains(searchQuery, ignoreCase = true) } + api
-        }
+        val apiJob = async { StationRepository.fetchAllIndia() }
+        allStations = customJob.await() + apiJob.await()
         loading = false
+    }
+
+    val stations = allStations.filter { s ->
+        val query = searchQuery.trim()
+        if (query.isNotBlank()) {
+            s.name.contains(query, ignoreCase = true)
+        } else {
+            selectedState == "All India" ||
+                    s.state.equals(selectedState, ignoreCase = true)
+        }
     }
 
     fun play(station: Station) {
@@ -204,7 +202,7 @@ fun RadioScreen() {
                     Text("State: $selectedState")
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    IndianStates.all.forEach { state ->
+                    (listOf("All India") + IndianStates.all).forEach { state ->
                         DropdownMenuItem(
                             text = { Text(state) },
                             onClick = {

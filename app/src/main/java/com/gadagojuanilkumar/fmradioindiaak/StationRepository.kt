@@ -63,13 +63,19 @@ object StationRepository {
         }
     }
 
+
+    suspend fun fetchAllIndia(): List<Station> {
+        val path = "/json/stations/search?countrycode=IN&hidebroken=true" +
+                "&order=clickcount&reverse=true&limit=10000"
+        return request(path, "India")
+    }
     private suspend fun request(path: String, fallbackState: String): List<Station> =
         withContext(Dispatchers.IO) {
             for (server in servers) {
                 try {
                     val connection = URL(server + path).openConnection() as HttpURLConnection
                     connection.connectTimeout = 10000
-                    connection.readTimeout = 15000
+                    connection.readTimeout = 40000
                     connection.setRequestProperty("User-Agent", "FMRadioIndiaAK/1.0")
                     val text = connection.inputStream.bufferedReader().use { it.readText() }
                     connection.disconnect()
