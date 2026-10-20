@@ -43,6 +43,13 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
+import coil.compose.SubcomposeAsyncImage
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -432,18 +439,71 @@ fun RadioScreen() {
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(stations) { station ->
-                        Text(
-                            text = station.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { play(station) }
-                                .padding(16.dp)
-                        )
+                        StationRow(station = station, onClick = { play(station) })
                         HorizontalDivider()
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun StationRow(station: Station, onClick: () -> Unit) {
+    val placeholder: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = station.name.take(1).uppercase(),
+                style = MaterialTheme.typography.titleLarge
+            )
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            if (station.logoUrl.startsWith("http")) {
+                SubcomposeAsyncImage(
+                    model = station.logoUrl,
+                    contentDescription = station.name,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(56.dp),
+                    loading = { placeholder() },
+                    error = { placeholder() }
+                )
+            } else {
+                placeholder()
+            }
+        }
+        Column(modifier = Modifier.padding(start = 12.dp)) {
+            Text(
+                text = station.name,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = listOf(station.state, station.language)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" - "),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
