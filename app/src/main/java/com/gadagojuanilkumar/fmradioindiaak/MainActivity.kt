@@ -100,6 +100,8 @@ fun RadioScreen() {
     var onlineOnly by remember { mutableStateOf(false) }
     var selectedLanguage by remember { mutableStateOf("All languages") }
     var languageMenuOpen by remember { mutableStateOf(false) }
+    var favoriteIds by remember { mutableStateOf(FavoritesStore.load(context)) }
+    var favoritesOnly by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -159,7 +161,7 @@ fun RadioScreen() {
             selectedState == "All India" ||
                     s.state.equals(selectedState, ignoreCase = true)
         }
-        languageOk && textOrStateOk
+        if (favoritesOnly) favoriteIds.contains(s.id) else languageOk && textOrStateOk
     }
 
     fun play(station: Station) {
@@ -179,6 +181,15 @@ fun RadioScreen() {
         c.setMediaItem(item)
         c.prepare()
         c.play()
+    }
+
+    fun toggleFavorite(station: Station) {
+        favoriteIds = if (favoriteIds.contains(station.id)) {
+            favoriteIds - station.id
+        } else {
+            favoriteIds + station.id
+        }
+        FavoritesStore.save(context, favoriteIds)
     }
 
     fun playRelative(step: Int) {
@@ -428,6 +439,17 @@ fun RadioScreen() {
                     }
                 }
             }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Favorites only")
+                Switch(checked = favoritesOnly, onCheckedChange = { favoritesOnly = it })
+            }
             if (loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
@@ -439,7 +461,12 @@ fun RadioScreen() {
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(stations) { station ->
-                        StationRow(station = station, onClick = { play(station) })
+                        StationRow(
+                            station = station,
+                            onClick = { play(station) },
+                            isFavorite = favoriteIds.contains(station.id),
+                            onToggleFavorite = { toggleFavorite(station) }
+                        )
                         HorizontalDivider()
                     }
                 }
@@ -449,7 +476,12 @@ fun RadioScreen() {
 }
 
 @Composable
-fun StationRow(station: Station, onClick: () -> Unit) {
+fun StationRow(
+    station: Station,
+    onClick: () -> Unit,
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {}
+) {
     val placeholder: @Composable () -> Unit = {
         Box(
             modifier = Modifier
@@ -489,7 +521,11 @@ fun StationRow(station: Station, onClick: () -> Unit) {
                 placeholder()
             }
         }
-        Column(modifier = Modifier.padding(start = 12.dp)) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp)
+        ) {
             Text(
                 text = station.name,
                 style = MaterialTheme.typography.bodyLarge,
@@ -503,6 +539,12 @@ fun StationRow(station: Station, onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
+            )
+        }
+        TextButton(onClick = onToggleFavorite) {
+            Text(
+                text = if (isFavorite) "\u2665" else "\u2661",
+                style = MaterialTheme.typography.headlineSmall
             )
         }
     }
