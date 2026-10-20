@@ -26,6 +26,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -75,6 +76,8 @@ fun RadioScreen() {
     var currentStation by remember { mutableStateOf<Station?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
     var controller by remember { mutableStateOf<MediaController?>(null) }
+    var searchText by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf("") }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -102,9 +105,13 @@ fun RadioScreen() {
         onDispose { MediaController.releaseFuture(future) }
     }
 
-    LaunchedEffect(selectedState) {
+    LaunchedEffect(selectedState, searchQuery) {
         loading = true
-        stations = StationRepository.fetchByState(selectedState)
+        stations = if (searchQuery.isBlank()) {
+            StationRepository.fetchByState(selectedState)
+        } else {
+            StationRepository.searchByName(searchQuery)
+        }
         loading = false
     }
 
@@ -189,6 +196,8 @@ fun RadioScreen() {
                             text = { Text(state) },
                             onClick = {
                                 selectedState = state
+                                searchText = ""
+                                searchQuery = ""
                                 menuOpen = false
                             }
                         )
@@ -196,6 +205,24 @@ fun RadioScreen() {
                 }
             }
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = searchText,
+                    onValueChange = { searchText = it },
+                    label = { Text("Name or frequency, e.g. 91.1") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = { searchQuery = searchText.trim() },
+                    modifier = Modifier.padding(start = 8.dp)
+                ) { Text("Search") }
+            }
             if (loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
