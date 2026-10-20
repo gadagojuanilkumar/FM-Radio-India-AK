@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.async
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -107,10 +108,20 @@ fun RadioScreen() {
 
     LaunchedEffect(selectedState, searchQuery) {
         loading = true
+        val customJob = async { StationRepository.fetchCustom() }
+        val apiJob = async {
+            if (searchQuery.isBlank()) {
+                StationRepository.fetchByState(selectedState)
+            } else {
+                StationRepository.searchByName(searchQuery)
+            }
+        }
+        val custom = customJob.await()
+        val api = apiJob.await()
         stations = if (searchQuery.isBlank()) {
-            StationRepository.fetchByState(selectedState)
+            custom.filter { it.state.equals(selectedState, ignoreCase = true) } + api
         } else {
-            StationRepository.searchByName(searchQuery)
+            custom.filter { it.name.contains(searchQuery, ignoreCase = true) } + api
         }
         loading = false
     }
@@ -118,6 +129,8 @@ fun RadioScreen() {
     fun play(station: Station) {
         val c = controller ?: return
         currentStation = station
+        c.stop()
+        c.clearMediaItems()
         val item = MediaItem.Builder()
             .setUri(station.streamUrl)
             .setMediaMetadata(

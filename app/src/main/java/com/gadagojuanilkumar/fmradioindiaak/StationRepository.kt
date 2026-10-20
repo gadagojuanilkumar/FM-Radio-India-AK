@@ -29,6 +29,40 @@ object StationRepository {
         return request(path, "India")
     }
 
+    suspend fun fetchCustom(): List<Station> = withContext(Dispatchers.IO) {
+        try {
+            val address = "https://raw.githubusercontent.com/gadagojuanilkumar/" +
+                    "FM-Radio-India-AK/main/data/stations.json"
+            val connection = URL(address).openConnection() as HttpURLConnection
+            connection.connectTimeout = 10000
+            connection.readTimeout = 15000
+            connection.setRequestProperty("User-Agent", "FMRadioIndiaAK/1.0")
+            val text = connection.inputStream.bufferedReader().use { it.readText() }
+            connection.disconnect()
+
+            val array = JSONArray(text)
+            val list = mutableListOf<Station>()
+            for (i in 0 until array.length()) {
+                val item = array.getJSONObject(i)
+                val name = item.optString("name").trim()
+                val url = item.optString("streamUrl").trim()
+                if (name.isBlank() || url.isBlank()) continue
+                list.add(
+                    Station(
+                        id = item.optString("id").ifBlank { "custom-$i" },
+                        name = name,
+                        state = item.optString("state").ifBlank { "India" },
+                        streamUrl = url,
+                        logoUrl = item.optString("logoUrl")
+                    )
+                )
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
     private suspend fun request(path: String, fallbackState: String): List<Station> =
         withContext(Dispatchers.IO) {
             for (server in servers) {
