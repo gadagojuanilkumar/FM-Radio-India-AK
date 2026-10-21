@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.alpha
@@ -193,10 +194,24 @@ fun RadioScreen() {
         loading = false
     }
 
-    val languages = listOf(
+    val indianLanguages = listOf(
         "All languages", "Telugu", "Hindi", "Tamil", "Kannada", "Malayalam",
         "Punjabi", "Bengali", "Marathi", "Odia", "Urdu", "English", "Bhojpuri"
     )
+    val languages = if (selectedCountry.code == "IN") {
+        indianLanguages
+    } else {
+        listOf("All languages") + allStations
+            .flatMap { it.language.split(",") }
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .take(25)
+            .map { e -> e.key.replaceFirstChar { ch -> ch.uppercase() } }
+    }
     val stations = allStations.filter { s ->
         val query = searchQuery.trim()
         val languageOk = selectedLanguage == "All languages" ||
@@ -554,8 +569,15 @@ fun RadioScreen() {
             Box(modifier = Modifier.padding(12.dp)) {
                 Row {
                     Box {
-                        OutlinedButton(onClick = { showCountryPicker = true }) {
-                            Text(selectedCountry.name)
+                        OutlinedButton(
+                            onClick = { showCountryPicker = true },
+                            modifier = Modifier.widthIn(max = 170.dp)
+                        ) {
+                            Text(
+                                text = selectedCountry.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                         DropdownMenu(
                             expanded = countryMenuOpen,
@@ -589,7 +611,11 @@ fun RadioScreen() {
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     OutlinedButton(onClick = { menuOpen = true }) {
-                        Text("State: $selectedState")
+                        Text(
+                            text = "State: $selectedState",
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
