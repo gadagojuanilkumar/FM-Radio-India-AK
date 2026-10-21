@@ -968,7 +968,11 @@ fun StationRow(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = listOf(station.state, station.language)
+                text = listOf(
+                    station.state,
+                    station.language,
+                    if (station.online) "" else "listed offline"
+                )
                     .filter { it.isNotBlank() }
                     .joinToString(" - "),
                 style = MaterialTheme.typography.bodySmall,

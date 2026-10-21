@@ -19,14 +19,14 @@ object StationRepository {
     suspend fun fetchByState(state: String): List<Station> {
         val encodedState = URLEncoder.encode(state, "UTF-8")
         val path = "/json/stations/search?countrycode=IN&state=$encodedState" +
-                "&hidebroken=true&order=clickcount&reverse=true&limit=100"
+                "&hidebroken=false&order=clickcount&reverse=true&limit=100"
         return request(path, state)
     }
 
     suspend fun searchByName(query: String): List<Station> {
         val encodedQuery = URLEncoder.encode(query.trim(), "UTF-8")
         val path = "/json/stations/search?countrycode=IN&name=$encodedQuery" +
-                "&hidebroken=true&order=clickcount&reverse=true&limit=100"
+                "&hidebroken=false&order=clickcount&reverse=true&limit=100"
         return request(path, "India")
     }
 
@@ -66,7 +66,7 @@ object StationRepository {
 
 
     suspend fun fetchAllIndia(): List<Station> {
-        val path = "/json/stations/search?countrycode=IN&hidebroken=true" +
+        val path = "/json/stations/search?countrycode=IN&hidebroken=false" +
                 "&order=clickcount&reverse=true&limit=10000"
         return request(path, "India")
     }
@@ -158,7 +158,7 @@ object StationRepository {
     suspend fun fetchCountries(): List<Country> = withContext(Dispatchers.IO) {
         for (server in servers) {
             try {
-                val address = server + "/json/countries?hidebroken=true" +
+                val address = server + "/json/countries?hidebroken=false" +
                         "&order=stationcount&reverse=true"
                 val connection = URL(address).openConnection() as HttpURLConnection
                 connection.connectTimeout = 10000
@@ -187,14 +187,14 @@ object StationRepository {
     }
 
     suspend fun fetchCountry(code: String, limit: Int = 3000): List<Station> {
-        val path = "/json/stations/search?countrycode=$code&hidebroken=true" +
+        val path = "/json/stations/search?countrycode=$code&hidebroken=false" +
                 "&order=clickcount&reverse=true&limit=$limit"
         return request(path, "")
     }
     suspend fun fetchWithCoordinates(code: String): List<Station> {
         if (code.isBlank()) return emptyList()
         val path = "/json/stations/search?countrycode=$code&has_geo_info=true" +
-                "&hidebroken=true&order=clickcount&reverse=true&limit=5000"
+                "&hidebroken=false&order=clickcount&reverse=true&limit=5000"
         return request(path, "").filter { it.lat != 0.0 || it.lon != 0.0 }
     }
     private suspend fun request(path: String, fallbackState: String): List<Station> =
@@ -232,11 +232,12 @@ object StationRepository {
                     logoUrl = item.optString("favicon"),
                     language = item.optString("language"),
                     lat = item.optDouble("geo_lat", 0.0),
-                    lon = item.optDouble("geo_long", 0.0)
+                    lon = item.optDouble("geo_long", 0.0),
+                    online = item.optInt("lastcheckok", 1) == 1
                 )
             )
         }
-        return list
+        return list.sortedBy { !it.online }
     }
 }
 

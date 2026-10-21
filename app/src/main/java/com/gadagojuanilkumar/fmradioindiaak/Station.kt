@@ -14,7 +14,8 @@ data class Station(
     val logoUrl: String = "",
     val language: String = "",
     val lat: Double = 0.0,
-    val lon: Double = 0.0
+    val lon: Double = 0.0,
+    val online: Boolean = true
 )
 
 fun distanceKm(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
