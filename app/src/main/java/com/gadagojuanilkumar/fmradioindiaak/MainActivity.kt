@@ -43,6 +43,12 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
+import androidx.compose.foundation.Canvas
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -229,7 +235,7 @@ fun RadioScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("FM Radio India (AK)") },
+                title = { Text("FM Radio Worldwide") },
                 actions = {
                     TextButton(onClick = { showDirectory = !showDirectory }) {
                         Text(if (showDirectory) "Stations" else "FM Directory")
@@ -247,31 +253,48 @@ fun RadioScreen() {
                 ) {
                     Text(
                         text = currentStation?.name ?: "Pick a station",
-                        style = MaterialTheme.typography.titleMedium
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                    val tint = if (currentStation != null) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
+                        IconButton(
                             enabled = currentStation != null,
-                            onClick = { playRelative(-1) }
-                        ) { Text("Previous") }
-                        Button(
+                            onClick = { playRelative(-1) },
+                            modifier = Modifier.size(56.dp)
+                        ) { ControlIcon("previous", tint) }
+                        IconButton(
                             enabled = currentStation != null,
                             onClick = {
                                 val c = controller
                                 if (c != null) {
                                     if (c.playWhenReady) c.pause() else c.play()
                                 }
-                            }
-                        ) { Text(if (isPlaying) "Pause" else "Play") }
-                        Button(
+                            },
+                            modifier = Modifier.size(64.dp)
+                        ) {
+                            ControlIcon(
+                                kind = if (isPlaying) "pause" else "play",
+                                tint = tint,
+                                modifier = Modifier.size(44.dp)
+                            )
+                        }
+                        IconButton(
                             enabled = currentStation != null,
-                            onClick = { playRelative(1) }
-                        ) { Text("Next") }
+                            onClick = { playRelative(1) },
+                            modifier = Modifier.size(56.dp)
+                        ) { ControlIcon("next", tint) }
                     }
                 }
             }
@@ -546,6 +569,49 @@ fun StationRow(
                 text = if (isFavorite) "\u2665" else "\u2661",
                 style = MaterialTheme.typography.headlineSmall
             )
+        }
+    }
+}
+
+@Composable
+fun ControlIcon(kind: String, tint: Color, modifier: Modifier = Modifier.size(32.dp)) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        when (kind) {
+            "play" -> {
+                val p = Path().apply {
+                    moveTo(w * 0.25f, h * 0.12f)
+                    lineTo(w * 0.88f, h * 0.5f)
+                    lineTo(w * 0.25f, h * 0.88f)
+                    close()
+                }
+                drawPath(p, tint)
+            }
+            "pause" -> {
+                drawRect(tint, Offset(w * 0.2f, h * 0.15f), Size(w * 0.22f, h * 0.7f))
+                drawRect(tint, Offset(w * 0.58f, h * 0.15f), Size(w * 0.22f, h * 0.7f))
+            }
+            "next" -> {
+                val p = Path().apply {
+                    moveTo(w * 0.12f, h * 0.15f)
+                    lineTo(w * 0.68f, h * 0.5f)
+                    lineTo(w * 0.12f, h * 0.85f)
+                    close()
+                }
+                drawPath(p, tint)
+                drawRect(tint, Offset(w * 0.74f, h * 0.15f), Size(w * 0.14f, h * 0.7f))
+            }
+            "previous" -> {
+                val p = Path().apply {
+                    moveTo(w * 0.88f, h * 0.15f)
+                    lineTo(w * 0.32f, h * 0.5f)
+                    lineTo(w * 0.88f, h * 0.85f)
+                    close()
+                }
+                drawPath(p, tint)
+                drawRect(tint, Offset(w * 0.12f, h * 0.15f), Size(w * 0.14f, h * 0.7f))
+            }
         }
     }
 }
