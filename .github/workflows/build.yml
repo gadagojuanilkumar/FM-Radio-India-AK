@@ -8,6 +8,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -21,11 +25,22 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug
+      - name: Unpack signing key
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "${{ runner.temp }}/release.jks"
+          echo "KEYSTORE_PATH=${{ runner.temp }}/release.jks" >> "$GITHUB_ENV"
 
-      - name: Upload APK
+      - name: Build signed release APK and bundle
+        run: ./gradlew assembleRelease bundleRelease
+
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: FM-Radio-India-AK-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: FM-Radio-Worldwide-signed-apk
+          path: app/build/outputs/apk/release/*.apk
+
+      - name: Upload Play Store bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: FM-Radio-Worldwide-playstore-bundle
+          path: app/build/outputs/bundle/release/*.aab
