@@ -43,6 +43,33 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.geometry.CornerRadius
+import coil.compose.AsyncImage
+import kotlin.math.abs
+import kotlin.math.sin
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.Canvas
 import androidx.compose.material3.IconButton
 import androidx.compose.ui.geometry.Offset
@@ -108,6 +135,7 @@ fun RadioScreen() {
     var languageMenuOpen by remember { mutableStateOf(false) }
     var favoriteIds by remember { mutableStateOf(FavoritesStore.load(context)) }
     var favoritesOnly by remember { mutableStateOf(false) }
+    var showPlayer by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -232,6 +260,24 @@ fun RadioScreen() {
             )
         )
     }
+    val playing = currentStation
+    if (showPlayer && playing != null) {
+        NowPlayingDialog(
+            station = playing,
+            isPlaying = isPlaying,
+            isFavorite = favoriteIds.contains(playing.id),
+            onToggle = {
+                val c = controller
+                if (c != null) {
+                    if (c.playWhenReady) c.pause() else c.play()
+                }
+            },
+            onPrevious = { playRelative(-1) },
+            onNext = { playRelative(1) },
+            onToggleFavorite = { toggleFavorite(playing) },
+            onClose = { showPlayer = false }
+        )
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -244,58 +290,79 @@ fun RadioScreen() {
             )
         },
         bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Column(
+            val current = currentStation
+            val barTint = if (current != null) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f)
+            }
+            Surface(
+                tonalElevation = 6.dp,
+                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = currentStation?.name ?: "Pick a station",
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    val tint = if (currentStation != null) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                    }
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
+                            .weight(1f)
+                            .clickable(enabled = current != null) { showPlayer = true },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(
-                            enabled = currentStation != null,
-                            onClick = { playRelative(-1) },
-                            modifier = Modifier.size(56.dp)
-                        ) { ControlIcon("previous", tint) }
-                        IconButton(
-                            enabled = currentStation != null,
-                            onClick = {
-                                val c = controller
-                                if (c != null) {
-                                    if (c.playWhenReady) c.pause() else c.play()
-                                }
-                            },
-                            modifier = Modifier.size(64.dp)
-                        ) {
-                            ControlIcon(
-                                kind = if (isPlaying) "pause" else "play",
-                                tint = tint,
-                                modifier = Modifier.size(44.dp)
+                        StationLogo(current, 48.dp)
+                        Column(modifier = Modifier.padding(start = 12.dp)) {
+                            Text(
+                                text = current?.name ?: "Pick a station",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = if (current == null) {
+                                    "Tap a station to start"
+                                } else {
+                                    listOf(if (isPlaying) "Playing" else "Paused", current.state)
+                                        .filter { it.isNotBlank() }
+                                        .joinToString(" - ")
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
-                        IconButton(
-                            enabled = currentStation != null,
-                            onClick = { playRelative(1) },
-                            modifier = Modifier.size(56.dp)
-                        ) { ControlIcon("next", tint) }
                     }
+                    IconButton(
+                        enabled = current != null,
+                        onClick = { playRelative(-1) },
+                        modifier = Modifier.size(44.dp)
+                    ) { ControlIcon("previous", barTint, Modifier.size(26.dp)) }
+                    IconButton(
+                        enabled = current != null,
+                        onClick = {
+                            val c = controller
+                            if (c != null) {
+                                if (c.playWhenReady) c.pause() else c.play()
+                            }
+                        },
+                        modifier = Modifier.size(52.dp)
+                    ) {
+                        ControlIcon(
+                            kind = if (isPlaying) "pause" else "play",
+                            tint = barTint,
+                            modifier = Modifier.size(34.dp)
+                        )
+                    }
+                    IconButton(
+                        enabled = current != null,
+                        onClick = { playRelative(1) },
+                        modifier = Modifier.size(44.dp)
+                    ) { ControlIcon("next", barTint, Modifier.size(26.dp)) }
                 }
             }
         }
@@ -611,6 +678,594 @@ fun ControlIcon(kind: String, tint: Color, modifier: Modifier = Modifier.size(32
                 }
                 drawPath(p, tint)
                 drawRect(tint, Offset(w * 0.12f, h * 0.15f), Size(w * 0.14f, h * 0.7f))
+            }
+        }
+    }
+}
+
+@Composable
+fun NowPlayingDialogOld(
+    station: Station,
+    isPlaying: Boolean,
+    isFavorite: Boolean,
+    onToggle: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onClose: () -> Unit
+) {
+    val letter: @Composable () -> Unit = {
+        Text(
+            text = station.name.take(1).uppercase(),
+            style = MaterialTheme.typography.displayLarge
+        )
+    }
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onClose) { Text("Close") }
+                    TextButton(onClick = onToggleFavorite) {
+                        Text(
+                            text = if (isFavorite) "\u2665" else "\u2661",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .padding(top = 24.dp)
+                        .size(280.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (station.logoUrl.startsWith("http")) {
+                        SubcomposeAsyncImage(
+                            model = station.logoUrl,
+                            contentDescription = station.name,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.size(280.dp),
+                            loading = { Box(contentAlignment = Alignment.Center) { letter() } },
+                            error = { Box(contentAlignment = Alignment.Center) { letter() } }
+                        )
+                    } else {
+                        letter()
+                    }
+                }
+                Text(
+                    text = station.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 24.dp)
+                )
+                Text(
+                    text = listOf(station.state, station.language)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" - "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 40.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val tint = MaterialTheme.colorScheme.onSurface
+                    IconButton(onClick = onPrevious, modifier = Modifier.size(72.dp)) {
+                        ControlIcon("previous", tint, Modifier.size(44.dp))
+                    }
+                    IconButton(onClick = onToggle, modifier = Modifier.size(88.dp)) {
+                        ControlIcon(
+                            kind = if (isPlaying) "pause" else "play",
+                            tint = tint,
+                            modifier = Modifier.size(64.dp)
+                        )
+                    }
+                    IconButton(onClick = onNext, modifier = Modifier.size(72.dp)) {
+                        ControlIcon("next", tint, Modifier.size(44.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StationLogo(station: Station?, size: Dp) {
+    val letter = station?.name?.take(1)?.uppercase() ?: "\u266B"
+    val placeholder: @Composable () -> Unit = {
+        Box(modifier = Modifier.size(size), contentAlignment = Alignment.Center) {
+            Text(text = letter, style = MaterialTheme.typography.titleMedium)
+        }
+    }
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        val url = station?.logoUrl ?: ""
+        if (url.startsWith("http")) {
+            SubcomposeAsyncImage(
+                model = url,
+                contentDescription = station?.name,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(size),
+                loading = { placeholder() },
+                error = { placeholder() }
+            )
+        } else {
+            placeholder()
+        }
+    }
+}
+
+@Composable
+fun EqualizerBars(active: Boolean, color: Color) {
+    val transition = rememberInfiniteTransition(label = "eq")
+    val bars = listOf(0.4f to 520, 0.7f to 430, 0.5f to 610, 0.9f to 480, 0.6f to 560)
+    Row(
+        modifier = Modifier.height(32.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        bars.forEachIndexed { i, (start, ms) ->
+            val h by transition.animateFloat(
+                initialValue = start,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(ms), RepeatMode.Reverse),
+                label = "bar$i"
+            )
+            val fraction = if (active) h else 0.25f
+            Box(
+                modifier = Modifier
+                    .width(6.dp)
+                    .height((32 * fraction).dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(color)
+            )
+        }
+    }
+}
+
+@Composable
+fun NowPlayingDialogV2(
+    station: Station,
+    isPlaying: Boolean,
+    isFavorite: Boolean,
+    onToggle: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onClose: () -> Unit
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val letter: @Composable () -> Unit = {
+        Text(
+            text = station.name.take(1).uppercase(),
+            style = MaterialTheme.typography.displayLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.primaryContainer,
+                            MaterialTheme.colorScheme.background
+                        )
+                    )
+                )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onClose) { Text("Close") }
+                    Text(
+                        text = "NOW PLAYING",
+                        style = MaterialTheme.typography.labelLarge,
+                        letterSpacing = 2.sp
+                    )
+                    TextButton(onClick = onToggleFavorite) {
+                        Text(
+                            text = if (isFavorite) "\u2665" else "\u2661",
+                            style = MaterialTheme.typography.headlineSmall
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    shadowElevation = 16.dp,
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Box(modifier = Modifier.size(300.dp), contentAlignment = Alignment.Center) {
+                        if (station.logoUrl.startsWith("http")) {
+                            SubcomposeAsyncImage(
+                                model = station.logoUrl,
+                                contentDescription = station.name,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.size(300.dp),
+                                loading = { Box(contentAlignment = Alignment.Center) { letter() } },
+                                error = { Box(contentAlignment = Alignment.Center) { letter() } }
+                            )
+                        } else {
+                            letter()
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(28.dp))
+                EqualizerBars(active = isPlaying, color = accent)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = station.name,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = listOf(station.state, station.language)
+                        .filter { it.isNotBlank() }
+                        .joinToString(" - "),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val tint = MaterialTheme.colorScheme.onSurface
+                    IconButton(onClick = onPrevious, modifier = Modifier.size(72.dp)) {
+                        ControlIcon("previous", tint, Modifier.size(40.dp))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(88.dp)
+                            .clip(CircleShape)
+                            .background(accent)
+                            .clickable { onToggle() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ControlIcon(
+                            kind = if (isPlaying) "pause" else "play",
+                            tint = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.size(44.dp)
+                        )
+                    }
+                    IconButton(onClick = onNext, modifier = Modifier.size(72.dp)) {
+                        ControlIcon("next", tint, Modifier.size(40.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun WaveBars(active: Boolean, modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "wave")
+    val t by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 6.2832f,
+        animationSpec = infiniteRepeatable(tween(1800, easing = LinearEasing), RepeatMode.Restart),
+        label = "t"
+    )
+    Canvas(modifier = modifier) {
+        val count = 28
+        val gap = size.width / count
+        val barW = gap * 0.55f
+        for (i in 0 until count) {
+            val phase = i * 0.55f
+            val level = if (active) {
+                0.2f + 0.8f * abs(sin(t * (1 + (i % 3)) + phase))
+            } else {
+                0.12f
+            }
+            val h = size.height * level
+            val x = i * gap + (gap - barW) / 2
+            val color = lerp(Color(0xFF22D3EE), Color(0xFFFF8A00), i / (count - 1f))
+            drawRoundRect(
+                color = color,
+                topLeft = Offset(x, size.height - h),
+                size = Size(barW, h),
+                cornerRadius = CornerRadius(barW / 2, barW / 2)
+            )
+        }
+    }
+}
+
+@Composable
+fun GlowFrame(active: Boolean, content: @Composable () -> Unit) {
+    val transition = rememberInfiniteTransition(label = "glow")
+    val pulse by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(1600), RepeatMode.Reverse),
+        label = "pulse"
+    )
+    val p = if (active) pulse else 0f
+    Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .size(270.dp)
+                .graphicsLayer {
+                    scaleX = 1f + 0.14f * p
+                    scaleY = 1f + 0.14f * p
+                    alpha = 0.6f - 0.35f * p
+                }
+                .clip(RoundedCornerShape(40.dp))
+                .background(
+                    Brush.linearGradient(
+                        listOf(Color(0xFF22D3EE), Color(0xFF7B2FF7), Color(0xFFFF8A00))
+                    )
+                )
+        )
+        content()
+    }
+}
+
+@Composable
+fun InfoChip(text: String) {
+    Surface(shape = RoundedCornerShape(50), color = Color.White.copy(alpha = 0.14f)) {
+        Text(
+            text = text,
+            color = Color.White,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+    }
+}
+
+@Composable
+fun GlassButton(size: Dp, onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.12f))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) { content() }
+}
+
+@Composable
+fun NowPlayingDialog(
+    station: Station,
+    isPlaying: Boolean,
+    isFavorite: Boolean,
+    onToggle: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onClose: () -> Unit
+) {
+    val hasLogo = station.logoUrl.startsWith("http")
+    val letter: @Composable () -> Unit = {
+        Text(
+            text = station.name.take(1).uppercase(),
+            style = MaterialTheme.typography.displayLarge,
+            color = Color.White
+        )
+    }
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0B1030))) {
+            if (hasLogo && Build.VERSION.SDK_INT >= 31) {
+                AsyncImage(
+                    model = station.logoUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .blur(60.dp)
+                        .alpha(0.5f)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xCC0B1030), Color(0xE61B1448), Color(0xF20B0A24))
+                        )
+                    )
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    GlassButton(44.dp, onClose) {
+                        Canvas(modifier = Modifier.size(18.dp)) {
+                            val sw = 3.dp.toPx()
+                            drawLine(
+                                Color.White,
+                                Offset(size.width * 0.1f, size.height * 0.3f),
+                                Offset(size.width * 0.5f, size.height * 0.7f),
+                                sw, StrokeCap.Round
+                            )
+                            drawLine(
+                                Color.White,
+                                Offset(size.width * 0.5f, size.height * 0.7f),
+                                Offset(size.width * 0.9f, size.height * 0.3f),
+                                sw, StrokeCap.Round
+                            )
+                        }
+                    }
+                    Text(
+                        text = "NOW PLAYING",
+                        color = Color.White.copy(alpha = 0.8f),
+                        style = MaterialTheme.typography.labelLarge,
+                        letterSpacing = 3.sp
+                    )
+                    GlassButton(44.dp, onToggleFavorite) {
+                        Text(
+                            text = if (isFavorite) "\u2665" else "\u2661",
+                            color = if (isFavorite) Color(0xFFFF4D6D) else Color.White,
+                            fontSize = 22.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+                GlowFrame(active = isPlaying) {
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        shadowElevation = 20.dp,
+                        color = Color(0xFF1E1A4D)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(250.dp)
+                                .border(
+                                    1.dp,
+                                    Color.White.copy(alpha = 0.25f),
+                                    RoundedCornerShape(28.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (hasLogo) {
+                                SubcomposeAsyncImage(
+                                    model = station.logoUrl,
+                                    contentDescription = station.name,
+                                    contentScale = ContentScale.Fit,
+                                    modifier = Modifier.size(250.dp),
+                                    loading = { Box(contentAlignment = Alignment.Center) { letter() } },
+                                    error = { Box(contentAlignment = Alignment.Center) { letter() } }
+                                )
+                            } else {
+                                letter()
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Color(0xFFFF3B30).copy(alpha = 0.25f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFF3B30))
+                            )
+                            Text(
+                                text = "  LIVE",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    if (station.state.isNotBlank()) InfoChip(station.state)
+                    if (station.language.isNotBlank()) InfoChip(station.language.take(18))
+                }
+                Spacer(modifier = Modifier.height(14.dp))
+                Text(
+                    text = station.name,
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                WaveBars(
+                    active = isPlaying,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .padding(horizontal = 8.dp)
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    GlassButton(68.dp, onPrevious) {
+                        ControlIcon("previous", Color.White, Modifier.size(30.dp))
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(92.dp)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFF22D3EE), Color(0xFF7B2FF7))
+                                )
+                            )
+                            .border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                            .clickable { onToggle() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        ControlIcon(
+                            kind = if (isPlaying) "pause" else "play",
+                            tint = Color.White,
+                            modifier = Modifier.size(44.dp)
+                        )
+                    }
+                    GlassButton(68.dp, onNext) {
+                        ControlIcon("next", Color.White, Modifier.size(30.dp))
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
