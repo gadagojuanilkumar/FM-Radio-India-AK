@@ -136,6 +136,11 @@ fun RadioScreen() {
     var favoriteIds by remember { mutableStateOf(FavoritesStore.load(context)) }
     var favoritesOnly by remember { mutableStateOf(false) }
     var showPlayer by remember { mutableStateOf(false) }
+    var countries by remember { mutableStateOf<List<Country>>(emptyList()) }
+    var selectedCountry by remember { mutableStateOf(Country("India", "IN", 0)) }
+    var countryMenuOpen by remember { mutableStateOf(false) }
+    var showCountryPicker by remember { mutableStateOf(false) }
+    var countryQuery by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -167,16 +172,24 @@ fun RadioScreen() {
     }
 
     LaunchedEffect(Unit) {
+        countries = StationRepository.fetchCountries()
+    }
+
+    LaunchedEffect(selectedCountry.code) {
         loading = true
-        val customJob = async { StationRepository.fetchCustom() }
-        val apiJob = async { StationRepository.fetchAllIndia() }
-        val fixJob = async { StationRepository.fetchStateFixes() }
-        val fixes = fixJob.await()
-        val api = apiJob.await().map { s ->
-            val fixed = fixes[s.id]
-            if (s.state == "India" && fixed != null) s.copy(state = fixed) else s
+        if (selectedCountry.code == "IN") {
+            val customJob = async { StationRepository.fetchCustom() }
+            val apiJob = async { StationRepository.fetchAllIndia() }
+            val fixJob = async { StationRepository.fetchStateFixes() }
+            val fixes = fixJob.await()
+            val api = apiJob.await().map { s ->
+                val fixed = fixes[s.id]
+                if (s.state == "India" && fixed != null) s.copy(state = fixed) else s
+            }
+            allStations = customJob.await() + api
+        } else {
+            allStations = StationRepository.fetchCountry(selectedCountry.code)
         }
-        allStations = customJob.await() + api
         loading = false
     }
 
@@ -192,7 +205,7 @@ fun RadioScreen() {
         val textOrStateOk = if (query.isNotBlank()) {
             s.name.contains(query, ignoreCase = true)
         } else {
-            selectedState == "All India" ||
+            selectedState.startsWith("All") ||
                     s.state.equals(selectedState, ignoreCase = true)
         }
         if (favoritesOnly) favoriteIds.contains(s.id) else languageOk && textOrStateOk
@@ -259,6 +272,71 @@ fun RadioScreen() {
                 streamUrl = entry.streamUrl
             )
         )
+    }
+    if (showCountryPicker) {
+        val cq = countryQuery.trim()
+        val shownCountries = (if (countries.isEmpty()) listOf(selectedCountry) else countries)
+            .sortedBy { it.name.lowercase() }
+            .filter {
+                cq.isBlank() ||
+                        it.name.contains(cq, ignoreCase = true) ||
+                        it.code.equals(cq, ignoreCase = true)
+            }
+        Dialog(
+            onDismissRequest = {
+                showCountryPicker = false
+                countryQuery = ""
+            },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Choose country", style = MaterialTheme.typography.titleLarge)
+                        TextButton(onClick = {
+                            showCountryPicker = false
+                            countryQuery = ""
+                        }) { Text("Close") }
+                    }
+                    OutlinedTextField(
+                        value = countryQuery,
+                        onValueChange = { countryQuery = it },
+                        label = { Text("Search country") },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    )
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(shownCountries) { c ->
+                            Text(
+                                text = if (c.count > 0) "${c.name}  (${c.count})" else c.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedCountry = c
+                                        selectedState =
+                                            if (c.code == "IN") "All India" else "All regions"
+                                        selectedLanguage = "All languages"
+                                        searchText = ""
+                                        searchQuery = ""
+                                        favoritesOnly = false
+                                        showCountryPicker = false
+                                        countryQuery = ""
+                                    }
+                                    .padding(vertical = 14.dp, horizontal = 8.dp)
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            }
+        }
     }
     val playing = currentStation
     if (showPlayer && playing != null) {
@@ -474,11 +552,56 @@ fun RadioScreen() {
                 .fillMaxSize()
         ) {
             Box(modifier = Modifier.padding(12.dp)) {
-                OutlinedButton(onClick = { menuOpen = true }) {
-                    Text("State: $selectedState")
+                Row {
+                    Box {
+                        OutlinedButton(onClick = { showCountryPicker = true }) {
+                            Text(selectedCountry.name)
+                        }
+                        DropdownMenu(
+                            expanded = countryMenuOpen,
+                            onDismissRequest = { countryMenuOpen = false }
+                        ) {
+                            val countryList = if (countries.isEmpty()) {
+                                listOf(selectedCountry)
+                            } else {
+                                countries
+                            }
+                            countryList.forEach { c ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            if (c.count > 0) "${c.name} (${c.count})" else c.name
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedCountry = c
+                                        selectedState =
+                                            if (c.code == "IN") "All India" else "All regions"
+                                        selectedLanguage = "All languages"
+                                        searchText = ""
+                                        searchQuery = ""
+                                        favoritesOnly = false
+                                        countryMenuOpen = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    OutlinedButton(onClick = { menuOpen = true }) {
+                        Text("State: $selectedState")
+                    }
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    (listOf("All India") + IndianStates.all).forEach { state ->
+                    val stateList = if (selectedCountry.code == "IN") {
+                        listOf("All India") + IndianStates.all
+                    } else {
+                        listOf("All regions") + allStations.map { it.state.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                            .sorted()
+                    }
+                    stateList.forEach { state ->
                         DropdownMenuItem(
                             text = { Text(state) },
                             onClick = {

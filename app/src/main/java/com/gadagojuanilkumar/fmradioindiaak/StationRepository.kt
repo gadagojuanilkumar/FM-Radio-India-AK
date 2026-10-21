@@ -155,6 +155,42 @@ object StationRepository {
         }
         return if (bestScore >= 4) best else null
     }
+    suspend fun fetchCountries(): List<Country> = withContext(Dispatchers.IO) {
+        for (server in servers) {
+            try {
+                val address = server + "/json/countries?hidebroken=true" +
+                        "&order=stationcount&reverse=true"
+                val connection = URL(address).openConnection() as HttpURLConnection
+                connection.connectTimeout = 10000
+                connection.readTimeout = 20000
+                connection.setRequestProperty("User-Agent", "FMRadioIndiaAK/1.0")
+                val text = connection.inputStream.bufferedReader().use { it.readText() }
+                connection.disconnect()
+
+                val array = JSONArray(text)
+                val list = mutableListOf<Country>()
+                for (i in 0 until array.length()) {
+                    val item = array.getJSONObject(i)
+                    val code = item.optString("iso_3166_1")
+                    val name = item.optString("name").trim()
+                    val count = item.optInt("stationcount")
+                    if (code.length == 2 && name.isNotBlank() && count > 0) {
+                        list.add(Country(name, code, count))
+                    }
+                }
+                return@withContext list
+            } catch (e: Exception) {
+                // Try the next server
+            }
+        }
+        emptyList()
+    }
+
+    suspend fun fetchCountry(code: String, limit: Int = 3000): List<Station> {
+        val path = "/json/stations/search?countrycode=$code&hidebroken=true" +
+                "&order=clickcount&reverse=true&limit=$limit"
+        return request(path, "")
+    }
     private suspend fun request(path: String, fallbackState: String): List<Station> =
         withContext(Dispatchers.IO) {
             for (server in servers) {
@@ -195,3 +231,5 @@ object StationRepository {
         return list
     }
 }
+
+data class Country(val name: String, val code: String, val count: Int)
