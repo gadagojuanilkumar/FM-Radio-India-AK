@@ -43,6 +43,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Switch
+import android.content.pm.PackageManager
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.foundation.border
@@ -142,6 +143,13 @@ fun RadioScreen() {
     var countryMenuOpen by remember { mutableStateOf(false) }
     var showCountryPicker by remember { mutableStateOf(false) }
     var countryQuery by remember { mutableStateOf("") }
+    var showNearMe by remember { mutableStateOf(false) }
+    var nearLoading by remember { mutableStateOf(false) }
+    var nearStatus by remember { mutableStateOf("") }
+    var nearPlaceText by remember { mutableStateOf("") }
+    var nearHasResult by remember { mutableStateOf(false) }
+    var nearRegion by remember { mutableStateOf<List<Station>>(emptyList()) }
+    var nearClosest by remember { mutableStateOf<List<Pair<Station, Double>>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -254,6 +262,96 @@ fun RadioScreen() {
         FavoritesStore.save(context, favoriteIds)
     }
 
+    fun findNearMe() {
+        scope.launch {
+            nearLoading = true
+            nearStatus = "Finding your location..."
+            val loc = LocationHelper.currentLocation(context)
+            if (loc == null) {
+                nearStatus = "Could not get your location. Turn on Location in your " +
+                        "phone settings and try again."
+                nearLoading = false
+                return@launch
+            }
+            val place = LocationHelper.describe(context, loc)
+            val code = place.countryCode.ifBlank { selectedCountry.code }
+            nearPlaceText = listOf(place.region, place.countryName)
+                .filter { it.isNotBlank() }
+                .joinToString(", ")
+            nearStatus = "Loading stations..."
+            val fixes = if (code == "IN") StationRepository.fetchStateFixes() else emptyMap()
+            val base = (
+                    if (code == selectedCountry.code && allStations.isNotEmpty()) {
+                        allStations
+                    } else {
+                        StationRepository.fetchCountry(code)
+                    }
+                    ).map { s ->
+                    val f = fixes[s.id]
+                    if ((s.state.isBlank() || s.state == "India") && f != null) {
+                        s.copy(state = f)
+                    } else {
+                        s
+                    }
+                }
+            val region = place.region
+            nearRegion = if (region.isBlank()) {
+                emptyList()
+            } else {
+                base.filter { s ->
+                    s.state.isNotBlank() && (
+                            s.state.equals(region, ignoreCase = true) ||
+                                    s.state.contains(region, ignoreCase = true) ||
+                                    region.contains(s.state, ignoreCase = true)
+                            )
+                }
+            }
+            val withGeo = StationRepository.fetchWithCoordinates(code)
+            nearClosest = withGeo
+                .map { s -> s to distanceKm(place.lat, place.lon, s.lat, s.lon) }
+                .sortedBy { it.second }
+                .take(40)
+            nearHasResult = true
+            nearStatus = if (nearRegion.isEmpty() && nearClosest.isEmpty()) {
+                "No stations found near you."
+            } else {
+                ""
+            }
+            nearLoading = false
+        }
+    }
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result.values.any { it }) {
+            findNearMe()
+        } else {
+            nearStatus = "Location permission was denied. Allow it in your phone " +
+                    "Settings, under Apps, then this app, then Permissions."
+        }
+    }
+
+    fun openNearMe() {
+        showNearMe = true
+        if (nearHasResult || nearLoading) return
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            findNearMe()
+        } else {
+            locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                )
+            )
+        }
+    }
     fun playRelative(step: Int) {
         if (stations.isEmpty()) return
         val index = stations.indexOfFirst { it.id == currentStation?.id }
@@ -353,6 +451,103 @@ fun RadioScreen() {
             }
         }
     }
+    if (showNearMe) {
+        Dialog(
+            onDismissRequest = { showNearMe = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Near me", style = MaterialTheme.typography.titleLarge)
+                        Row {
+                            TextButton(onClick = {
+                                nearHasResult = false
+                                nearRegion = emptyList()
+                                nearClosest = emptyList()
+                                openNearMe()
+                            }) { Text("Refresh") }
+                            TextButton(onClick = { showNearMe = false }) { Text("Close") }
+                        }
+                    }
+                    if (nearPlaceText.isNotBlank()) {
+                        Text(
+                            text = "You are in: $nearPlaceText",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                    currentStation?.let {
+                        Text(
+                            text = "Now playing: ${it.name}",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                    }
+                    if (nearStatus.isNotBlank()) {
+                        Text(
+                            text = nearStatus,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                    if (nearLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) { CircularProgressIndicator() }
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            if (nearRegion.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "In your region (${nearRegion.size})",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                }
+                                items(nearRegion) { s ->
+                                    StationRow(
+                                        station = s,
+                                        onClick = { play(s) },
+                                        isFavorite = favoriteIds.contains(s.id),
+                                        onToggleFavorite = { toggleFavorite(s) }
+                                    )
+                                    HorizontalDivider()
+                                }
+                            }
+                            if (nearClosest.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "Closest by distance",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                                    )
+                                }
+                                items(nearClosest) { pair ->
+                                    val s = pair.first
+                                    val km = pair.second.toInt()
+                                    StationRow(
+                                        station = s.copy(
+                                            language = if (km < 1) "under 1 km away" else "$km km away"
+                                        ),
+                                        onClick = { play(s) },
+                                        isFavorite = favoriteIds.contains(s.id),
+                                        onToggleFavorite = { toggleFavorite(s) }
+                                    )
+                                    HorizontalDivider()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     val playing = currentStation
     if (showPlayer && playing != null) {
         NowPlayingDialog(
@@ -376,6 +571,7 @@ fun RadioScreen() {
             TopAppBar(
                 title = { Text("FM Radio Worldwide") },
                 actions = {
+                    TextButton(onClick = { openNearMe() }) { Text("Near me") }
                     TextButton(onClick = { showDirectory = !showDirectory }) {
                         Text(if (showDirectory) "Stations" else "FM Directory")
                     }

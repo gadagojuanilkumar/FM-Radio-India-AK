@@ -191,6 +191,12 @@ object StationRepository {
                 "&order=clickcount&reverse=true&limit=$limit"
         return request(path, "")
     }
+    suspend fun fetchWithCoordinates(code: String): List<Station> {
+        if (code.isBlank()) return emptyList()
+        val path = "/json/stations/search?countrycode=$code&has_geo_info=true" +
+                "&hidebroken=true&order=clickcount&reverse=true&limit=5000"
+        return request(path, "").filter { it.lat != 0.0 || it.lon != 0.0 }
+    }
     private suspend fun request(path: String, fallbackState: String): List<Station> =
         withContext(Dispatchers.IO) {
             for (server in servers) {
@@ -224,7 +230,9 @@ object StationRepository {
                     state = item.optString("state").ifBlank { fallbackState },
                     streamUrl = url,
                     logoUrl = item.optString("favicon"),
-                    language = item.optString("language")
+                    language = item.optString("language"),
+                    lat = item.optDouble("geo_lat", 0.0),
+                    lon = item.optDouble("geo_long", 0.0)
                 )
             )
         }
