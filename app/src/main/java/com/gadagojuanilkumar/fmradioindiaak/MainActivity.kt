@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -34,14 +33,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.async
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TextButton
@@ -1620,8 +1617,6 @@ fun NowPlayingDialog(
                         .padding(horizontal = 8.dp)
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                SleepTimerButton()
-                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
@@ -1656,57 +1651,5 @@ fun NowPlayingDialog(
                 Spacer(modifier = Modifier.height(16.dp))
             }
         }
-    }
-}
-
-@Composable
-fun SleepTimerButton() {
-    val endTime by SleepTimer.endTimeMs.collectAsState()
-    var showPicker by remember { mutableStateOf(false) }
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
-
-    // Refresh the "minutes left" text every second while the timer is running
-    LaunchedEffect(endTime) {
-        while (endTime > 0L) {
-            now = System.currentTimeMillis()
-            delay(1000)
-        }
-    }
-
-    val label = if (endTime > 0L) {
-        val minutesLeft = ((endTime - now) / 60000L + 1).coerceAtLeast(1L)
-        "Sleep timer: $minutesLeft min left"
-    } else {
-        "Sleep timer"
-    }
-
-    TextButton(onClick = { showPicker = true }) {
-        Text(text = label, color = Color.White)
-    }
-
-    if (showPicker) {
-        AlertDialog(
-            onDismissRequest = { showPicker = false },
-            title = { Text("Stop playing after") },
-            text = {
-                Column {
-                    listOf(15, 30, 45, 60, 90).forEach { minutes ->
-                        TextButton(onClick = {
-                            SleepTimer.start(minutes)
-                            showPicker = false
-                        }) { Text("$minutes minutes") }
-                    }
-                    if (endTime > 0L) {
-                        TextButton(onClick = {
-                            SleepTimer.cancel()
-                            showPicker = false
-                        }) { Text("Turn off timer") }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showPicker = false }) { Text("Close") }
-            }
-        )
     }
 }

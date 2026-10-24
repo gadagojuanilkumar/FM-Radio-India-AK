@@ -48,8 +48,6 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
 
-        SleepTimer.attach(player)
-
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) {
@@ -103,7 +101,6 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
-        SleepTimer.detach()
         mediaSession?.run {
             player.release()
             release()
