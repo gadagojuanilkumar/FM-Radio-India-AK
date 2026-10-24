@@ -53,6 +53,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.geometry.CornerRadius
+import coil.Coil
+import coil.ImageLoader
+import coil.disk.DiskCache
 import coil.compose.AsyncImage
 import kotlin.math.abs
 import kotlin.math.sin
@@ -101,6 +104,18 @@ import com.google.common.util.concurrent.MoreExecutors
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        StationRepository.init(applicationContext)
+        Coil.setImageLoader(
+            ImageLoader.Builder(applicationContext)
+                .respectCacheHeaders(false)
+                .diskCache {
+                    DiskCache.Builder()
+                        .directory(applicationContext.cacheDir.resolve("logo_cache"))
+                        .maxSizeBytes(50L * 1024 * 1024)
+                        .build()
+                }
+                .build()
+        )
         setContent {
             FMRadioIndiaAKTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -241,6 +256,12 @@ fun RadioScreen() {
         c.clearMediaItems()
         val item = MediaItem.Builder()
             .setUri(station.streamUrl)
+            .setLiveConfiguration(
+                MediaItem.LiveConfiguration.Builder()
+                    .setMinPlaybackSpeed(1f)
+                    .setMaxPlaybackSpeed(1f)
+                    .build()
+            )
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(station.name)
@@ -557,7 +578,12 @@ fun RadioScreen() {
             onToggle = {
                 val c = controller
                 if (c != null) {
-                    if (c.playWhenReady) c.pause() else c.play()
+                    if (c.playWhenReady) {
+                        c.pause()
+                    } else {
+                        if (c.playbackState == Player.STATE_IDLE) c.prepare()
+                        c.play()
+                    }
                 }
             },
             onPrevious = { playRelative(-1) },
@@ -636,7 +662,12 @@ fun RadioScreen() {
                         onClick = {
                             val c = controller
                             if (c != null) {
-                                if (c.playWhenReady) c.pause() else c.play()
+                                if (c.playWhenReady) {
+                                    c.pause()
+                                } else {
+                                    if (c.playbackState == Player.STATE_IDLE) c.prepare()
+                                    c.play()
+                                }
                             }
                         },
                         modifier = Modifier.size(52.dp)
