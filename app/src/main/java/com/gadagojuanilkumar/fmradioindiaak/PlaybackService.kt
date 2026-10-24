@@ -26,8 +26,18 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .build()
 
+        // Keep up to PAUSE_BUFFER_MS of the stream buffered while paused, so
+        // pressing Play continues from where you paused instead of jumping to live.
+        // A live stream only delivers audio at its normal speed, so this does not
+        // download extra data while you are listening - only while paused, and
+        // never more than PAUSE_BUFFER_MS worth.
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(PAUSE_BUFFER_MS, PAUSE_BUFFER_MS, 2_500, 5_000)
+            .setBufferDurationsMs(
+                PAUSE_BUFFER_MS,   // min buffer
+                PAUSE_BUFFER_MS,   // max buffer
+                2_500,             // buffer needed to start playing
+                5_000              // buffer needed to resume after a stall
+            )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
@@ -38,6 +48,8 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
 
+        SleepTimer.attach(player)
+
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) {
@@ -46,6 +58,8 @@ class PlaybackService : MediaSessionService() {
                     player.mediaItemCount > 0 &&
                     reconnectAttempts < MAX_RECONNECTS
                 ) {
+                    // The server closed the stream (for example after a long pause
+                    // once the saved audio ran out). Reconnect to the live stream.
                     reconnectAttempts++
                     player.seekToDefaultPosition()
                     player.prepare()
@@ -61,11 +75,14 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
+        // Tapping the media notification / lock-screen controls opens the app.
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val openApp = PendingIntent.getActivity(
-            this, 0, openAppIntent,
+            this,
+            0,
+            openAppIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
@@ -86,6 +103,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        SleepTimer.detach()
         mediaSession?.run {
             player.release()
             release()
@@ -95,6 +113,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     private companion object {
+        // How much audio is kept while paused (5 minutes). Raise for longer pauses,
+        // lower to use less data while paused.
         const val PAUSE_BUFFER_MS = 5 * 60 * 1000
         const val MAX_RECONNECTS = 3
     }
