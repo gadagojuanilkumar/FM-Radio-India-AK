@@ -10,7 +10,6 @@ An Android app for listening to Indian FM radio stations online, with support fo
 - **FM Directory**: a list of Akashvani and private FM stations by state, city and frequency, with a switch to show only the ones that can be played online
 - Favorites list saved on your phone
 - **Pause and resume**: after pausing, Play continues from where you stopped (up to 5 minutes), instead of jumping to live
-- **Sleep timer**: stop playing after 15, 30, 45, 60 or 90 minutes
 - Tapping the notification opens the app
 - Saves station lists and logos on your phone, so it uses less mobile data and still shows stations offline
 
@@ -24,7 +23,6 @@ Add screenshots here, for example `docs/home.png` and `docs/now-playing.png`.
 |---|---|
 | Screens (stations list, Near me, FM Directory, Now Playing) | `MainActivity.kt` |
 | Background playback and media notification (Media3 ExoPlayer) | `PlaybackService.kt` |
-| Sleep timer | `SleepTimer.kt` |
 | Station lists, downloads and on-device cache | `StationRepository.kt` |
 | Favorites | `FavoritesStore.kt` |
 | Location for "Near me" | `LocationHelper.kt` |
