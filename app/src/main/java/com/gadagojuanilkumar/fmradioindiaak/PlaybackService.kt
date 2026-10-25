@@ -2,9 +2,14 @@ package com.gadagojuanilkumar.fmradioindiaak
 
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -18,6 +23,9 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private var reconnectAttempts = 0
+    private var retryAttempts = 0
+    private val handler = Handler(Looper.getMainLooper())
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -26,18 +34,8 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .build()
 
-        // Keep up to PAUSE_BUFFER_MS of the stream buffered while paused, so
-        // pressing Play continues from where you paused instead of jumping to live.
-        // A live stream only delivers audio at its normal speed, so this does not
-        // download extra data while you are listening - only while paused, and
-        // never more than PAUSE_BUFFER_MS worth.
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(
-                PAUSE_BUFFER_MS,   // min buffer
-                PAUSE_BUFFER_MS,   // max buffer
-                2_500,             // buffer needed to start playing
-                5_000              // buffer needed to resume after a stall
-            )
+            .setBufferDurationsMs(PAUSE_BUFFER_MS, PAUSE_BUFFER_MS, 2_500, 5_000)
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
@@ -52,12 +50,11 @@ class PlaybackService : MediaSessionService() {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) {
                     reconnectAttempts = 0
+                    retryAttempts = 0
                 } else if (state == Player.STATE_ENDED &&
                     player.mediaItemCount > 0 &&
                     reconnectAttempts < MAX_RECONNECTS
                 ) {
-                    // The server closed the stream (for example after a long pause
-                    // once the saved audio ran out). Reconnect to the live stream.
                     reconnectAttempts++
                     player.seekToDefaultPosition()
                     player.prepare()
@@ -65,22 +62,56 @@ class PlaybackService : MediaSessionService() {
                 }
             }
 
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                // A new station was chosen: forget any retries for the old one
+                handler.removeCallbacksAndMessages(null)
+                retryAttempts = 0
+                reconnectAttempts = 0
+            }
+
             override fun onPlayerError(error: PlaybackException) {
                 if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
                     player.seekToDefaultPosition()
                     player.prepare()
+                    return
+                }
+                val isNetworkProblem =
+                    error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                            error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                val maxTries = if (isNetworkProblem) MAX_NETWORK_RETRIES else MAX_OTHER_RETRIES
+                // Try again after 2s, 4s, 6s ... while the user still wants to listen
+                if (player.playWhenReady && retryAttempts < maxTries) {
+                    retryAttempts++
+                    handler.removeCallbacksAndMessages(null)
+                    handler.postDelayed({ player.prepare() }, retryAttempts * 2000L)
                 }
             }
         })
 
-        // Tapping the media notification / lock-screen controls opens the app.
+        // When the internet comes back (or switches between Wi-Fi and mobile data),
+        // restart a stream that had stopped because of an error.
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                handler.post {
+                    if (player.playWhenReady && player.playerError != null) {
+                        retryAttempts = 0
+                        player.prepare()
+                    }
+                }
+            }
+        }
+        try {
+            getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(callback)
+            networkCallback = callback
+        } catch (e: Exception) {
+            // Auto-restart on network return is a bonus; playback works without it
+        }
+
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val openApp = PendingIntent.getActivity(
-            this,
-            0,
-            openAppIntent,
+            this, 0, openAppIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
@@ -101,6 +132,13 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        networkCallback?.let {
+            try {
+                getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(it)
+            } catch (e: Exception) {
+            }
+        }
         mediaSession?.run {
             player.release()
             release()
@@ -110,9 +148,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     private companion object {
-        // How much audio is kept while paused (5 minutes). Raise for longer pauses,
-        // lower to use less data while paused.
         const val PAUSE_BUFFER_MS = 5 * 60 * 1000
         const val MAX_RECONNECTS = 3
+        const val MAX_NETWORK_RETRIES = 6
+        const val MAX_OTHER_RETRIES = 2
     }
 }

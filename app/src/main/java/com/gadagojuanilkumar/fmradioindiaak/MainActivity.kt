@@ -2,6 +2,9 @@ package com.gadagojuanilkumar.fmradioindiaak
 
 import android.Manifest
 import android.content.ComponentName
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -95,6 +98,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -139,6 +143,9 @@ fun RadioScreen() {
     var allStations by remember { mutableStateOf<List<Station>>(emptyList()) }
     var currentStation by remember { mutableStateOf<Station?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
+    var isBuffering by remember { mutableStateOf(false) }
+    var playbackError by remember { mutableStateOf("") }
+    var reloadKey by remember { mutableStateOf(0) }
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var searchText by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
@@ -189,6 +196,19 @@ fun RadioScreen() {
                     isPlaying = player.playWhenReady &&
                             player.playbackState != Player.STATE_IDLE &&
                             player.playbackState != Player.STATE_ENDED
+                    isBuffering = player.playbackState == Player.STATE_BUFFERING
+                    if (player.playbackState == Player.STATE_READY) playbackError = ""
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    val network =
+                        error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+                                error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                    playbackError = if (network) {
+                        "No internet - reconnecting..."
+                    } else {
+                        "Station not working right now"
+                    }
                 }
             })
             isPlaying = c.playWhenReady
@@ -201,7 +221,7 @@ fun RadioScreen() {
         countries = StationRepository.fetchCountries()
     }
 
-    LaunchedEffect(selectedCountry.code) {
+    LaunchedEffect(selectedCountry.code, reloadKey) {
         loading = true
         if (selectedCountry.code == "IN") {
             val customJob = async { StationRepository.fetchCustom() }
@@ -254,6 +274,7 @@ fun RadioScreen() {
     fun play(station: Station) {
         val c = controller ?: return
         currentStation = station
+        playbackError = ""
         c.stop()
         c.clearMediaItems()
         val item = MediaItem.Builder()
@@ -644,7 +665,13 @@ fun RadioScreen() {
                                 text = if (current == null) {
                                     "Tap a station to start"
                                 } else {
-                                    listOf(if (isPlaying) "Playing" else "Paused", current.state)
+                                    val status = when {
+                                        playbackError.isNotBlank() -> playbackError
+                                        isPlaying && isBuffering -> "Connecting..."
+                                        isPlaying -> "Playing"
+                                        else -> "Paused"
+                                    }
+                                    listOf(status, current.state)
                                         .filter { it.isNotBlank() }
                                         .joinToString(" - ")
                                 },
@@ -925,7 +952,22 @@ fun RadioScreen() {
                 }
             } else if (stations.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No stations found for $selectedState")
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = if (allStations.isEmpty() && !isOnline(context)) {
+                                "No internet connection.\nConnect and try again."
+                            } else {
+                                "No stations found for $selectedState"
+                            },
+                            textAlign = TextAlign.Center
+                        )
+                        if (allStations.isEmpty()) {
+                            Button(
+                                onClick = { reloadKey++ },
+                                modifier = Modifier.padding(top = 12.dp)
+                            ) { Text("Try again") }
+                        }
+                    }
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -1652,4 +1694,10 @@ fun NowPlayingDialog(
             }
         }
     }
+}
+
+fun isOnline(context: Context): Boolean {
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+    return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }
