@@ -145,6 +145,7 @@ fun RadioScreen() {
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(false) }
     var playbackError by remember { mutableStateOf("") }
+    var songTitle by remember { mutableStateOf("") }
     var reloadKey by remember { mutableStateOf(0) }
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var searchText by remember { mutableStateOf("") }
@@ -200,6 +201,18 @@ fun RadioScreen() {
                     if (player.playbackState == Player.STATE_READY) playbackError = ""
                 }
 
+                override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
+                    // Radio streams send the current song as the "title". Ignore it when
+                    // it is empty or just repeats the station name.
+                    val title = mediaMetadata.title?.toString()?.trim() ?: ""
+                    songTitle = if (title.isBlank() ||
+                        title.equals(currentStation?.name, ignoreCase = true)
+                    ) {
+                        ""
+                    } else {
+                        title
+                    }
+                }
                 override fun onPlayerError(error: PlaybackException) {
                     val network =
                         error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
@@ -275,6 +288,7 @@ fun RadioScreen() {
         val c = controller ?: return
         currentStation = station
         playbackError = ""
+        songTitle = ""
         c.stop()
         c.clearMediaItems()
         val item = MediaItem.Builder()
@@ -290,6 +304,12 @@ fun RadioScreen() {
                 MediaMetadata.Builder()
                     .setTitle(station.name)
                     .setArtist(station.state)
+                    .setExtras(
+                        Bundle().apply {
+                            putString("stationName", station.name)
+                            putString("stationState", station.state)
+                        }
+                    )
                     .build()
             )
             .build()
@@ -597,6 +617,7 @@ fun RadioScreen() {
     if (showPlayer && playing != null) {
         NowPlayingDialog(
             station = playing,
+            songTitle = songTitle,
             isPlaying = isPlaying,
             isFavorite = favoriteIds.contains(playing.id),
             onToggle = {
@@ -668,6 +689,7 @@ fun RadioScreen() {
                                     val status = when {
                                         playbackError.isNotBlank() -> playbackError
                                         isPlaying && isBuffering -> "Connecting..."
+                                        isPlaying && songTitle.isNotBlank() -> "\u266B " + songTitle
                                         isPlaying -> "Playing"
                                         else -> "Paused"
                                     }
@@ -1495,6 +1517,7 @@ fun GlassButton(size: Dp, onClick: () -> Unit, content: @Composable () -> Unit) 
 @Composable
 fun NowPlayingDialog(
     station: Station,
+    songTitle: String = "",
     isPlaying: Boolean,
     isFavorite: Boolean,
     onToggle: () -> Unit,
@@ -1650,6 +1673,17 @@ fun NowPlayingDialog(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (songTitle.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "\u266B " + songTitle,
+                        color = Color.White.copy(alpha = 0.85f),
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
                 WaveBars(
                     active = isPlaying,

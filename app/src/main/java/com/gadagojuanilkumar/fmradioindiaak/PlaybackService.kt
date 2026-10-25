@@ -10,11 +10,13 @@ import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Metadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.extractor.metadata.icy.IcyInfo
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 
@@ -62,6 +64,15 @@ class PlaybackService : MediaSessionService() {
                 }
             }
 
+            override fun onMetadata(metadata: Metadata) {
+                // Radio streams send the current song title inside the audio stream
+                for (i in 0 until metadata.length()) {
+                    val entry = metadata.get(i)
+                    if (entry is IcyInfo) {
+                        showSongTitle(player, entry.title)
+                    }
+                }
+            }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 // A new station was chosen: forget any retries for the old one
                 handler.removeCallbacksAndMessages(null)
@@ -119,7 +130,37 @@ class PlaybackService : MediaSessionService() {
             .setSessionActivity(openApp)
             .build()
     }
+    // Puts the song title into the notification and the app: title = song, artist = station.
+    // When there is no song, goes back to title = station, artist = state.
+    private fun showSongTitle(player: Player, rawTitle: String?) {
+        val current = player.currentMediaItem ?: return
+        val extras = current.mediaMetadata.extras ?: return
+        val stationName = extras.getString("stationName") ?: return
+        val stationState = extras.getString("stationState") ?: ""
 
+        val song = (rawTitle ?: "").replace(Regex("\\s+"), " ").trim()
+        val hasSong = song.isNotBlank() && !song.equals(stationName, ignoreCase = true)
+        val wantedTitle = if (hasSong) song else stationName
+        val wantedArtist = if (hasSong) stationName else stationState
+
+        val metadata = current.mediaMetadata
+        // The same title arrives again and again; only update when it really changed
+        if (metadata.title?.toString() == wantedTitle &&
+            metadata.artist?.toString() == wantedArtist
+        ) return
+
+        player.replaceMediaItem(
+            player.currentMediaItemIndex,
+            current.buildUpon()
+                .setMediaMetadata(
+                    metadata.buildUpon()
+                        .setTitle(wantedTitle)
+                        .setArtist(wantedArtist)
+                        .build()
+                )
+                .build()
+        )
+    }
     override fun onGetSession(
         controllerInfo: MediaSession.ControllerInfo
     ): MediaSession? = mediaSession
