@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.TrafficStats
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -42,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.TextButton
@@ -162,6 +164,7 @@ fun RadioScreen() {
     var languageMenuOpen by remember { mutableStateOf(false) }
     var favoriteIds by remember { mutableStateOf(FavoritesStore.load(context)) }
     var favoritesOnly by remember { mutableStateOf(false) }
+    var dataSaver by remember { mutableStateOf(false) }
     var showPlayer by remember { mutableStateOf(false) }
     var countries by remember { mutableStateOf<List<Country>>(emptyList()) }
     var selectedCountry by remember { mutableStateOf(Country("India", "IN", 0)) }
@@ -282,6 +285,15 @@ fun RadioScreen() {
                     s.state.equals(selectedState, ignoreCase = true)
         }
         if (favoritesOnly) favoriteIds.contains(s.id) else languageOk && textOrStateOk
+    }.let { list ->
+        if (dataSaver) {
+            // Working streams first, then the lowest bitrate first (unknown bitrate last)
+            list.sortedWith(
+                compareBy<Station>({ !it.online }, { if (it.bitrate <= 0) Int.MAX_VALUE else it.bitrate })
+            )
+        } else {
+            list
+        }
     }
 
     fun play(station: Station) {
@@ -968,6 +980,17 @@ fun RadioScreen() {
                 Text("Favorites only")
                 Switch(checked = favoritesOnly, onCheckedChange = { favoritesOnly = it })
             }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Data saver (lightest streams first)")
+                Switch(checked = dataSaver, onCheckedChange = { dataSaver = it })
+            }
+            DataUsageRow()
             if (loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
@@ -1077,6 +1100,14 @@ fun StationRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            if (station.bitrate > 0) {
+                Text(
+                    text = "${station.bitrate} kbps - about ${mbPerHour(station.bitrate)} MB per hour",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         TextButton(onClick = onToggleFavorite) {
             Text(
@@ -1734,4 +1765,59 @@ fun isOnline(context: Context): Boolean {
     val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
     return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+}
+
+// Roughly how much data a stream of this bitrate (kbps) uses in one hour
+fun mbPerHour(bitrateKbps: Int): Int = (bitrateKbps * 45 + 50) / 100
+
+fun formatBytes(bytes: Long): String {
+    val mb = bytes / (1024.0 * 1024.0)
+    return if (mb >= 1024) "%.2f GB".format(mb / 1024) else "%.1f MB".format(mb)
+}
+
+@Composable
+fun DataUsageRow() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("data_usage", Context.MODE_PRIVATE) }
+    var total by remember { mutableStateOf(prefs.getLong("total", 0L)) }
+    var supported by remember { mutableStateOf(true) }
+
+    // Every few seconds, add the data this app has downloaded since the last check
+    LaunchedEffect(Unit) {
+        while (true) {
+            val rx = TrafficStats.getUidRxBytes(android.os.Process.myUid())
+            if (rx == TrafficStats.UNSUPPORTED.toLong()) {
+                supported = false
+                break
+            }
+            val last = prefs.getLong("last", -1L)
+            // If the counter went down, the phone was restarted
+            val delta = if (last < 0) 0L else if (rx >= last) rx - last else rx
+            val newTotal = prefs.getLong("total", 0L) + delta
+            prefs.edit().putLong("total", newTotal).putLong("last", rx).apply()
+            total = newTotal
+            delay(5000)
+        }
+    }
+
+    if (!supported) return
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "Data used by this app: " + formatBytes(total),
+            style = MaterialTheme.typography.bodyMedium
+        )
+        TextButton(onClick = {
+            prefs.edit()
+                .putLong("total", 0L)
+                .putLong("last", TrafficStats.getUidRxBytes(android.os.Process.myUid()))
+                .apply()
+            total = 0L
+        }) { Text("Reset") }
+    }
 }

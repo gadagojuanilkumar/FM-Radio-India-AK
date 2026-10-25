@@ -276,7 +276,8 @@ object StationRepository {
                     language = item.optString("language"),
                     lat = item.optDouble("geo_lat", 0.0),
                     lon = item.optDouble("geo_long", 0.0),
-                    online = item.optInt("lastcheckok", 1) == 1
+                    online = item.optInt("lastcheckok", 1) == 1,
+                    bitrate = item.optInt("bitrate", 0)
                 )
             )
         }
