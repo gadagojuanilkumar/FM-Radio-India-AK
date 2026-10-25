@@ -138,8 +138,12 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun RadioScreen() {
     val context = LocalContext.current
+    val settings = remember { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
+    val savedLanguage = settings.getString("language", "All languages") ?: "All languages"
 
-    var selectedState by remember { mutableStateOf("Telangana") }
+    var selectedState by remember {
+        mutableStateOf(if (savedLanguage == "All languages") "Telangana" else "All India")
+    }
     var menuOpen by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var allStations by remember { mutableStateOf<List<Station>>(emptyList()) }
@@ -160,11 +164,11 @@ fun RadioScreen() {
     var directoryQuery by remember { mutableStateOf("") }
     var directoryMessage by remember { mutableStateOf("") }
     var onlineOnly by remember { mutableStateOf(false) }
-    var selectedLanguage by remember { mutableStateOf("All languages") }
+    var selectedLanguage by remember { mutableStateOf(savedLanguage) }
+    var showLanguagePrompt by remember { mutableStateOf(!settings.getBoolean("language_asked", false)) }
     var languageMenuOpen by remember { mutableStateOf(false) }
     var favoriteIds by remember { mutableStateOf(FavoritesStore.load(context)) }
     var favoritesOnly by remember { mutableStateOf(false) }
-    var dataSaver by remember { mutableStateOf(false) }
     var showPlayer by remember { mutableStateOf(false) }
     var countries by remember { mutableStateOf<List<Country>>(emptyList()) }
     var selectedCountry by remember { mutableStateOf(Country("India", "IN", 0)) }
@@ -285,15 +289,6 @@ fun RadioScreen() {
                     s.state.equals(selectedState, ignoreCase = true)
         }
         if (favoritesOnly) favoriteIds.contains(s.id) else languageOk && textOrStateOk
-    }.let { list ->
-        if (dataSaver) {
-            // Working streams first, then the lowest bitrate first (unknown bitrate last)
-            list.sortedWith(
-                compareBy<Station>({ !it.online }, { if (it.bitrate <= 0) Int.MAX_VALUE else it.bitrate })
-            )
-        } else {
-            list
-        }
     }
 
     fun play(station: Station) {
@@ -462,6 +457,61 @@ fun RadioScreen() {
                 streamUrl = entry.streamUrl
             )
         )
+    }
+    fun chooseLanguage(language: String) {
+        selectedLanguage = language
+        settings.edit().putString("language", language).apply()
+    }
+    if (showLanguagePrompt) {
+        Dialog(
+            onDismissRequest = { },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false
+            )
+        ) {
+            Surface(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        text = "Which language do you listen to?",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Text(
+                        text = "We will show these stations. You can change it any time " +
+                                "with the Language button.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(top = 16.dp)
+                    ) {
+                        items(indianLanguages.drop(1)) { l ->
+                            OutlinedButton(
+                                onClick = {
+                                    chooseLanguage(l)
+                                    selectedState = "All India"
+                                    settings.edit().putBoolean("language_asked", true).apply()
+                                    showLanguagePrompt = false
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) { Text(l) }
+                        }
+                    }
+                    TextButton(
+                        onClick = {
+                            settings.edit().putBoolean("language_asked", true).apply()
+                            showLanguagePrompt = false
+                        },
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    ) { Text("Skip - show all languages") }
+                }
+            }
+        }
     }
     if (showCountryPicker) {
         val cq = countryQuery.trim()
@@ -962,7 +1012,7 @@ fun RadioScreen() {
                         DropdownMenuItem(
                             text = { Text(l) },
                             onClick = {
-                                selectedLanguage = l
+                                chooseLanguage(l)
                                 languageMenuOpen = false
                             }
                         )
@@ -979,16 +1029,6 @@ fun RadioScreen() {
             ) {
                 Text("Favorites only")
                 Switch(checked = favoritesOnly, onCheckedChange = { favoritesOnly = it })
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Data saver (lightest streams first)")
-                Switch(checked = dataSaver, onCheckedChange = { dataSaver = it })
             }
             DataUsageRow()
             if (loading) {
