@@ -1,4 +1,4 @@
-# FM Radio India (AK)
+# FM Radio (AK)
 
 An Android app for listening to Indian FM radio stations online, with support for stations from other countries too. Built with Kotlin and Jetpack Compose.
 

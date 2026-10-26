@@ -702,7 +702,7 @@ fun RadioScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("FM Radio Worldwide") },
+                title = { Text("FM Radio (AK)") },
                 actions = {
                     TextButton(onClick = { openNearMe() }) { Text("Near me") }
                     TextButton(onClick = { showDirectory = !showDirectory }) {
