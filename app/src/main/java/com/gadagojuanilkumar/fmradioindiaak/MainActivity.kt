@@ -434,8 +434,8 @@ fun RadioScreen() {
                 selectedCountry = Country(place.countryName.ifBlank { code }, code, 0)
                 selectedState = if (code == "IN") "All India" else "All regions"
             }
-            // If the user chose a language, keep "All India" so that language is not hidden
-            if (code == "IN" && selectedLanguage == "All languages") {
+
+            if (code == "IN") {
                 val region = place.region
                 val match = IndianStates.all.firstOrNull { st ->
                     region.isNotBlank() && (
@@ -754,7 +754,7 @@ fun RadioScreen() {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("FM Radio (AK)") },
+                title = { Text("FM Radio - Bhoogolam") },
                 actions = {
                     TextButton(onClick = { openNearMe() }) { Text("Near me") }
                     TextButton(onClick = { showDirectory = !showDirectory }) {
@@ -1104,6 +1104,18 @@ fun RadioScreen() {
                                 onClick = { reloadKey++ },
                                 modifier = Modifier.padding(top = 12.dp)
                             ) { Text("Try again") }
+                        } else if (!selectedState.startsWith("All")) {
+                            Button(
+                                onClick = {
+                                    selectedState =
+                                        if (selectedCountry.code == "IN") "All India" else "All regions"
+                                },
+                                modifier = Modifier.padding(top = 12.dp)
+                            ) {
+                                Text(
+                                    if (selectedCountry.code == "IN") "Show all India" else "Show all regions"
+                                )
+                            }
                         }
                     }
                 }
