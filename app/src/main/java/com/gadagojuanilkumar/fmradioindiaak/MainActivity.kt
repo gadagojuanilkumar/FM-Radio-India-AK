@@ -140,7 +140,7 @@ class MainActivity : ComponentActivity() {
 fun RadioScreen() {
     val context = LocalContext.current
     val settings = remember { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
-    val savedLanguage = settings.getString("language", "All languages") ?: "All languages"
+
 
     var selectedState by remember { mutableStateOf("All India") }
     var menuOpen by remember { mutableStateOf(false) }
@@ -163,8 +163,7 @@ fun RadioScreen() {
     var directoryQuery by remember { mutableStateOf("") }
     var directoryMessage by remember { mutableStateOf("") }
     var onlineOnly by remember { mutableStateOf(false) }
-    var selectedLanguage by remember { mutableStateOf(savedLanguage) }
-    var showLanguagePrompt by remember { mutableStateOf(!settings.getBoolean("language_asked", false)) }
+    var selectedLanguage by remember { mutableStateOf("All languages") }
     var languageMenuOpen by remember { mutableStateOf(false) }
     var favoriteIds by remember { mutableStateOf(FavoritesStore.load(context)) }
     var favoritesOnly by remember { mutableStateOf(false) }
@@ -455,9 +454,8 @@ fun RadioScreen() {
         if (result.values.any { it }) autoDetectRegion()
     }
 
-    // Runs when the app opens (after the language question has been answered)
-    LaunchedEffect(showLanguagePrompt) {
-        if (showLanguagePrompt) return@LaunchedEffect
+    // Runs when the app opens
+    LaunchedEffect(Unit) {
         val granted = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED ||
@@ -510,61 +508,7 @@ fun RadioScreen() {
             )
         )
     }
-    fun chooseLanguage(language: String) {
-        selectedLanguage = language
-        settings.edit().putString("language", language).apply()
-    }
-    if (showLanguagePrompt) {
-        Dialog(
-            onDismissRequest = { },
-            properties = DialogProperties(
-                usePlatformDefaultWidth = false,
-                dismissOnBackPress = false,
-                dismissOnClickOutside = false
-            )
-        ) {
-            Surface(modifier = Modifier.fillMaxSize()) {
-                Column(modifier = Modifier.padding(24.dp)) {
-                    Text(
-                        text = "Which language do you listen to?",
-                        style = MaterialTheme.typography.headlineSmall
-                    )
-                    Text(
-                        text = "We will show these stations. You can change it any time " +
-                                "with the Language button.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(top = 16.dp)
-                    ) {
-                        items(indianLanguages.drop(1)) { l ->
-                            OutlinedButton(
-                                onClick = {
-                                    chooseLanguage(l)
-                                    selectedState = "All India"
-                                    settings.edit().putBoolean("language_asked", true).apply()
-                                    showLanguagePrompt = false
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                            ) { Text(l) }
-                        }
-                    }
-                    TextButton(
-                        onClick = {
-                            settings.edit().putBoolean("language_asked", true).apply()
-                            showLanguagePrompt = false
-                        },
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    ) { Text("Skip - show all languages") }
-                }
-            }
-        }
-    }
+
     if (showCountryPicker) {
         val cq = countryQuery.trim()
         val shownCountries = (if (countries.isEmpty()) listOf(selectedCountry) else countries)
@@ -1053,25 +997,7 @@ fun RadioScreen() {
                     modifier = Modifier.padding(start = 8.dp)
                 ) { Text("Search") }
             }
-            Box(modifier = Modifier.padding(horizontal = 12.dp)) {
-                OutlinedButton(onClick = { languageMenuOpen = true }) {
-                    Text("Language: $selectedLanguage")
-                }
-                DropdownMenu(
-                    expanded = languageMenuOpen,
-                    onDismissRequest = { languageMenuOpen = false }
-                ) {
-                    languages.forEach { l ->
-                        DropdownMenuItem(
-                            text = { Text(l) },
-                            onClick = {
-                                chooseLanguage(l)
-                                languageMenuOpen = false
-                            }
-                        )
-                    }
-                }
-            }
+
 
             Row(
                 modifier = Modifier

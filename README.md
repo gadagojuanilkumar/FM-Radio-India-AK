@@ -5,7 +5,7 @@ An Android app for listening to Indian FM radio stations online, with support fo
 ## Features
 
 - Stream thousands of live radio stations, with background playback and notification / lock-screen controls
-- Browse by country, state and language, or search by station name
+- Browse by country and state, or search by station name
 - **Near me**: finds stations in your region and the closest ones by distance (asks for location permission)
 - **FM Directory**: a list of Akashvani and private FM stations by state, city and frequency, with a switch to show only the ones that can be played online
 - Favorites list saved on your phone
