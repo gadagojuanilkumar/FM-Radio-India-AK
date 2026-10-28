@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +58,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.geometry.CornerRadius
 import coil.Coil
@@ -994,8 +998,14 @@ fun RadioScreen() {
                 )
                 Button(
                     onClick = { searchQuery = searchText.trim() },
-                    modifier = Modifier.padding(start = 8.dp)
-                ) { Text("Search") }
+                    modifier = Modifier
+                        .padding(start = 8.dp)
+                        .size(52.dp)
+                        .semantics { contentDescription = "Search" },
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    ControlIcon("search", MaterialTheme.colorScheme.onPrimary, Modifier.size(24.dp))
+                }
             }
 
 
@@ -1187,6 +1197,22 @@ fun ControlIcon(kind: String, tint: Color, modifier: Modifier = Modifier.size(32
                 }
                 drawPath(p, tint)
                 drawRect(tint, Offset(w * 0.12f, h * 0.15f), Size(w * 0.14f, h * 0.7f))
+            }
+            "search" -> {
+                // magnifying glass: a ring and a short handle
+                drawCircle(
+                    color = tint,
+                    radius = w * 0.28f,
+                    center = Offset(w * 0.42f, h * 0.42f),
+                    style = Stroke(width = w * 0.1f)
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(w * 0.64f, h * 0.64f),
+                    end = Offset(w * 0.88f, h * 0.88f),
+                    strokeWidth = w * 0.12f,
+                    cap = StrokeCap.Round
+                )
             }
         }
     }
