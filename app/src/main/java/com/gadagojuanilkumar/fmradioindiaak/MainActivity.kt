@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -141,9 +142,7 @@ fun RadioScreen() {
     val settings = remember { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
     val savedLanguage = settings.getString("language", "All languages") ?: "All languages"
 
-    var selectedState by remember {
-        mutableStateOf(if (savedLanguage == "All languages") "Telangana" else "All India")
-    }
+    var selectedState by remember { mutableStateOf("All India") }
     var menuOpen by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var allStations by remember { mutableStateOf<List<Station>>(emptyList()) }
@@ -417,6 +416,59 @@ fun RadioScreen() {
             findNearMe()
         } else {
             locationPermissionLauncher.launch(
+                arrayOf(
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                )
+            )
+        }
+    }
+    // Picks the country and state from the phone's location
+    fun autoDetectRegion() {
+        scope.launch {
+            val loc = LocationHelper.currentLocation(context) ?: return@launch
+            val place = LocationHelper.describe(context, loc)
+            val code = place.countryCode.uppercase()
+            if (code.isBlank()) return@launch
+            if (code != selectedCountry.code) {
+                selectedCountry = Country(place.countryName.ifBlank { code }, code, 0)
+                selectedState = if (code == "IN") "All India" else "All regions"
+            }
+            // If the user chose a language, keep "All India" so that language is not hidden
+            if (code == "IN" && selectedLanguage == "All languages") {
+                val region = place.region
+                val match = IndianStates.all.firstOrNull { st ->
+                    region.isNotBlank() && (
+                            st.equals(region, ignoreCase = true) ||
+                                    st.contains(region, ignoreCase = true) ||
+                                    region.contains(st, ignoreCase = true)
+                            )
+                }
+                if (match != null) selectedState = match
+            }
+        }
+    }
+
+    val autoLocationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result.values.any { it }) autoDetectRegion()
+    }
+
+    // Runs when the app opens (after the language question has been answered)
+    LaunchedEffect(showLanguagePrompt) {
+        if (showLanguagePrompt) return@LaunchedEffect
+        val granted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            autoDetectRegion()
+        } else if (!settings.getBoolean("location_asked", false)) {
+            settings.edit().putBoolean("location_asked", true).apply()
+            autoLocationLauncher.launch(
                 arrayOf(
                     Manifest.permission.ACCESS_COARSE_LOCATION,
                     Manifest.permission.ACCESS_FINE_LOCATION
@@ -726,6 +778,7 @@ fun RadioScreen() {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .navigationBarsPadding()
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
