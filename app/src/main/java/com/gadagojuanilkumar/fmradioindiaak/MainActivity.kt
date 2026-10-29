@@ -31,6 +31,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -159,7 +161,8 @@ fun RadioScreen() {
     var controller by remember { mutableStateOf<MediaController?>(null) }
     var searchText by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
-    var showDirectory by remember { mutableStateOf(false) }
+    var currentTab by remember { mutableStateOf(0) }
+    val showDirectory = currentTab == 3
     var directory by remember { mutableStateOf<List<FmEntry>>(emptyList()) }
     var directoryLoading by remember { mutableStateOf(false) }
     var directoryState by remember { mutableStateOf("Telangana") }
@@ -222,6 +225,7 @@ fun RadioScreen() {
                         title
                     }
                 }
+
                 override fun onPlayerError(error: PlaybackException) {
                     val network =
                         error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
@@ -280,17 +284,16 @@ fun RadioScreen() {
             .map { e -> e.key.replaceFirstChar { ch -> ch.uppercase() } }
     }
     val stations = allStations.filter { s ->
-        val query = searchQuery.trim()
-        val languageOk = selectedLanguage == "All languages" ||
-                s.language.contains(selectedLanguage, ignoreCase = true) ||
-                (selectedLanguage == "Bengali" && s.language.contains("bangla", ignoreCase = true))
-        val textOrStateOk = if (query.isNotBlank()) {
-            s.name.contains(query, ignoreCase = true)
-        } else {
-            selectedState.startsWith("All") ||
+        when (currentTab) {
+            2 -> favoriteIds.contains(s.id)
+            1 -> {
+                val q = searchQuery.trim()
+                q.isNotBlank() && s.name.contains(q, ignoreCase = true)
+            }
+
+            else -> selectedState.startsWith("All") ||
                     s.state.equals(selectedState, ignoreCase = true)
         }
-        if (favoritesOnly) favoriteIds.contains(s.id) else languageOk && textOrStateOk
     }
 
     fun play(station: Station) {
@@ -426,6 +429,7 @@ fun RadioScreen() {
             )
         }
     }
+
     // Picks the country and state from the phone's location
     fun autoDetectRegion() {
         scope.launch {
@@ -705,99 +709,123 @@ fun RadioScreen() {
                 title = { Text("FM Radio - Bhoogolam") },
                 actions = {
                     TextButton(onClick = { openNearMe() }) { Text("Near me") }
-                    TextButton(onClick = { showDirectory = !showDirectory }) {
-                        Text(if (showDirectory) "Stations" else "FM Directory")
-                    }
                 }
             )
         },
         bottomBar = {
-            val current = currentStation
-            val barTint = if (current != null) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f)
-            }
-            Surface(
-                tonalElevation = 6.dp,
-                shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            Column {
+                val current = currentStation
+                val barTint = if (current != null) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.3f)
+                }
+                Surface(
+                    tonalElevation = 6.dp,
+                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .clickable(enabled = current != null) { showPlayer = true },
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        StationLogo(current, 48.dp)
-                        Column(modifier = Modifier.padding(start = 12.dp)) {
-                            Text(
-                                text = current?.name ?: "Pick a station",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = if (current == null) {
-                                    "Tap a station to start"
-                                } else {
-                                    val status = when {
-                                        playbackError.isNotBlank() -> playbackError
-                                        isPlaying && isBuffering -> "Connecting..."
-                                        isPlaying && songTitle.isNotBlank() -> "\u266B " + songTitle
-                                        isPlaying -> "Playing"
-                                        else -> "Paused"
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable(enabled = current != null) { showPlayer = true },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            StationLogo(current, 48.dp)
+                            Column(modifier = Modifier.padding(start = 12.dp)) {
+                                Text(
+                                    text = current?.name ?: "Pick a station",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (current == null) {
+                                        "Tap a station to start"
+                                    } else {
+                                        val status = when {
+                                            playbackError.isNotBlank() -> playbackError
+                                            isPlaying && isBuffering -> "Connecting..."
+                                            isPlaying && songTitle.isNotBlank() -> "\u266B " + songTitle
+                                            isPlaying -> "Playing"
+                                            else -> "Paused"
+                                        }
+                                        listOf(status, current.state)
+                                            .filter { it.isNotBlank() }
+                                            .joinToString(" - ")
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        IconButton(
+                            enabled = current != null,
+                            onClick = { playRelative(-1) },
+                            modifier = Modifier.size(44.dp)
+                        ) { ControlIcon("previous", barTint, Modifier.size(26.dp)) }
+                        IconButton(
+                            enabled = current != null,
+                            onClick = {
+                                val c = controller
+                                if (c != null) {
+                                    if (c.playWhenReady) {
+                                        c.pause()
+                                    } else {
+                                        if (c.playbackState == Player.STATE_IDLE) c.prepare()
+                                        c.play()
                                     }
-                                    listOf(status, current.state)
-                                        .filter { it.isNotBlank() }
-                                        .joinToString(" - ")
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                }
+                            },
+                            modifier = Modifier.size(52.dp)
+                        ) {
+                            ControlIcon(
+                                kind = if (isPlaying) "pause" else "play",
+                                tint = barTint,
+                                modifier = Modifier.size(34.dp)
                             )
                         }
+                        IconButton(
+                            enabled = current != null,
+                            onClick = { playRelative(1) },
+                            modifier = Modifier.size(44.dp)
+                        ) { ControlIcon("next", barTint, Modifier.size(26.dp)) }
                     }
-                    IconButton(
-                        enabled = current != null,
-                        onClick = { playRelative(-1) },
-                        modifier = Modifier.size(44.dp)
-                    ) { ControlIcon("previous", barTint, Modifier.size(26.dp)) }
-                    IconButton(
-                        enabled = current != null,
-                        onClick = {
-                            val c = controller
-                            if (c != null) {
-                                if (c.playWhenReady) {
-                                    c.pause()
-                                } else {
-                                    if (c.playbackState == Player.STATE_IDLE) c.prepare()
-                                    c.play()
-                                }
-                            }
-                        },
-                        modifier = Modifier.size(52.dp)
-                    ) {
-                        ControlIcon(
-                            kind = if (isPlaying) "pause" else "play",
-                            tint = barTint,
-                            modifier = Modifier.size(34.dp)
+                }
+                NavigationBar {
+                    val tabs = listOf(
+                        "Home" to "home",
+                        "Search" to "search",
+                        "Library" to "library",
+                        "Directory" to "directory"
+                    )
+                    tabs.forEachIndexed { index, (label, kind) ->
+                        NavigationBarItem(
+                            selected = currentTab == index,
+                            onClick = { currentTab = index },
+                            icon = {
+                                ControlIcon(
+                                    kind,
+                                    if (currentTab == index) {
+                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    Modifier.size(24.dp)
+                                )
+                            },
+                            label = { Text(label) }
                         )
                     }
-                    IconButton(
-                        enabled = current != null,
-                        onClick = { playRelative(1) },
-                        modifier = Modifier.size(44.dp)
-                    ) { ControlIcon("next", barTint, Modifier.size(26.dp)) }
                 }
             }
         }
@@ -808,8 +836,8 @@ fun RadioScreen() {
             val q = directoryQuery.trim()
             val shown = directory.filter { e ->
                 (!onlineOnly || e.streamUrl.isNotBlank()) &&
-                (directoryState == "All India" ||
-                        e.state.equals(directoryState, ignoreCase = true)) &&
+                        (directoryState == "All India" ||
+                                e.state.equals(directoryState, ignoreCase = true)) &&
                         (q.isBlank() ||
                                 e.city.contains(q, ignoreCase = true) ||
                                 e.name.contains(q, ignoreCase = true) ||
@@ -908,118 +936,115 @@ fun RadioScreen() {
                 .padding(padding)
                 .fillMaxSize()
         ) {
-            Box(modifier = Modifier.padding(12.dp)) {
-                Row {
-                    Box {
-                        OutlinedButton(
-                            onClick = { showCountryPicker = true },
-                            modifier = Modifier.widthIn(max = 170.dp)
-                        ) {
+            if (currentTab == 0) {
+                Box(modifier = Modifier.padding(12.dp)) {
+                    Row {
+                        Box {
+                            OutlinedButton(
+                                onClick = { showCountryPicker = true },
+                                modifier = Modifier.widthIn(max = 170.dp)
+                            ) {
+                                Text(
+                                    text = selectedCountry.name,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = countryMenuOpen,
+                                onDismissRequest = { countryMenuOpen = false }
+                            ) {
+                                val countryList = if (countries.isEmpty()) {
+                                    listOf(selectedCountry)
+                                } else {
+                                    countries
+                                }
+                                countryList.forEach { c ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                if (c.count > 0) "${c.name} (${c.count})" else c.name
+                                            )
+                                        },
+                                        onClick = {
+                                            selectedCountry = c
+                                            selectedState =
+                                                if (c.code == "IN") "All India" else "All regions"
+                                            selectedLanguage = "All languages"
+                                            searchText = ""
+                                            searchQuery = ""
+                                            favoritesOnly = false
+                                            countryMenuOpen = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        OutlinedButton(onClick = { menuOpen = true }) {
                             Text(
-                                text = selectedCountry.name,
+                                text = "State: $selectedState",
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        DropdownMenu(
-                            expanded = countryMenuOpen,
-                            onDismissRequest = { countryMenuOpen = false }
-                        ) {
-                            val countryList = if (countries.isEmpty()) {
-                                listOf(selectedCountry)
-                            } else {
-                                countries
-                            }
-                            countryList.forEach { c ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            if (c.count > 0) "${c.name} (${c.count})" else c.name
-                                        )
-                                    },
-                                    onClick = {
-                                        selectedCountry = c
-                                        selectedState =
-                                            if (c.code == "IN") "All India" else "All regions"
-                                        selectedLanguage = "All languages"
-                                        searchText = ""
-                                        searchQuery = ""
-                                        favoritesOnly = false
-                                        countryMenuOpen = false
-                                    }
-                                )
-                            }
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        val stateList = if (selectedCountry.code == "IN") {
+                            listOf("All India") + IndianStates.all
+                        } else {
+                            listOf("All regions") + allStations.map { it.state.trim() }
+                                .filter { it.isNotBlank() }
+                                .distinct()
+                                .sorted()
+                        }
+                        stateList.forEach { state ->
+                            DropdownMenuItem(
+                                text = { Text(state) },
+                                onClick = {
+                                    selectedState = state
+                                    searchText = ""
+                                    searchQuery = ""
+                                    menuOpen = false
+                                }
+                            )
                         }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    OutlinedButton(onClick = { menuOpen = true }) {
-                        Text(
-                            text = "State: $selectedState",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    val stateList = if (selectedCountry.code == "IN") {
-                        listOf("All India") + IndianStates.all
-                    } else {
-                        listOf("All regions") + allStations.map { it.state.trim() }
-                            .filter { it.isNotBlank() }
-                            .distinct()
-                            .sorted()
-                    }
-                    stateList.forEach { state ->
-                        DropdownMenuItem(
-                            text = { Text(state) },
-                            onClick = {
-                                selectedState = state
-                                searchText = ""
-                                searchQuery = ""
-                                menuOpen = false
-                            }
-                        )
-                    }
                 }
             }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = searchText,
-                    onValueChange = { searchText = it },
-                    label = { Text("Name or frequency, e.g. 91.1") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-                Button(
-                    onClick = { searchQuery = searchText.trim() },
+            if (currentTab == 1) {
+                Row(
                     modifier = Modifier
-                        .padding(start = 8.dp)
-                        .size(52.dp)
-                        .semantics { contentDescription = "Search" },
-                    contentPadding = PaddingValues(0.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ControlIcon("search", MaterialTheme.colorScheme.onPrimary, Modifier.size(24.dp))
+                    OutlinedTextField(
+                        value = searchText,
+                        onValueChange = { searchText = it },
+                        label = { Text("Name or frequency, e.g. 91.1") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = { searchQuery = searchText.trim() },
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .size(52.dp)
+                            .semantics { contentDescription = "Search" },
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        ControlIcon(
+                            "search",
+                            MaterialTheme.colorScheme.onPrimary,
+                            Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
-
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("Favorites only")
-                Switch(checked = favoritesOnly, onCheckedChange = { favoritesOnly = it })
+            if (currentTab == 2) {
+                DataUsageRow()
             }
-            DataUsageRow()
             if (loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
@@ -1028,10 +1053,20 @@ fun RadioScreen() {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = if (allStations.isEmpty() && !isOnline(context)) {
-                                "No internet connection.\nConnect and try again."
-                            } else {
-                                "No stations found for $selectedState"
+                            text = when {
+                                allStations.isEmpty() && !isOnline(context) ->
+                                    "No internet connection.\nConnect and try again."
+
+                                currentTab == 1 && searchQuery.isBlank() ->
+                                    "Type a station name and tap the search icon."
+
+                                currentTab == 1 ->
+                                    "No stations match \"$searchQuery\""
+
+                                currentTab == 2 ->
+                                    "No favorites yet.\nTap the heart on a station to save it here."
+
+                                else -> "No stations found for $selectedState"
                             },
                             textAlign = TextAlign.Center
                         )
@@ -1040,7 +1075,7 @@ fun RadioScreen() {
                                 onClick = { reloadKey++ },
                                 modifier = Modifier.padding(top = 12.dp)
                             ) { Text("Try again") }
-                        } else if (!selectedState.startsWith("All")) {
+                        } else if (currentTab == 0 && !selectedState.startsWith("All")) {
                             Button(
                                 onClick = {
                                     selectedState =
@@ -1071,7 +1106,6 @@ fun RadioScreen() {
         }
     }
 }
-
 @Composable
 fun StationRow(
     station: Station,
@@ -1197,6 +1231,43 @@ fun ControlIcon(kind: String, tint: Color, modifier: Modifier = Modifier.size(32
                 }
                 drawPath(p, tint)
                 drawRect(tint, Offset(w * 0.12f, h * 0.15f), Size(w * 0.14f, h * 0.7f))
+            }
+            "home" -> {
+                val p = Path().apply {
+                    moveTo(w * 0.5f, h * 0.12f)
+                    lineTo(w * 0.92f, h * 0.5f)
+                    lineTo(w * 0.8f, h * 0.5f)
+                    lineTo(w * 0.8f, h * 0.88f)
+                    lineTo(w * 0.6f, h * 0.88f)
+                    lineTo(w * 0.6f, h * 0.62f)
+                    lineTo(w * 0.4f, h * 0.62f)
+                    lineTo(w * 0.4f, h * 0.88f)
+                    lineTo(w * 0.2f, h * 0.88f)
+                    lineTo(w * 0.2f, h * 0.5f)
+                    lineTo(w * 0.08f, h * 0.5f)
+                    close()
+                }
+                drawPath(p, tint)
+            }
+            "library" -> {
+                drawRect(tint, Offset(w * 0.12f, h * 0.18f), Size(w * 0.16f, h * 0.64f))
+                drawRect(tint, Offset(w * 0.40f, h * 0.18f), Size(w * 0.16f, h * 0.64f))
+                val p = Path().apply {
+                    moveTo(w * 0.66f, h * 0.24f)
+                    lineTo(w * 0.80f, h * 0.18f)
+                    lineTo(w * 0.92f, h * 0.76f)
+                    lineTo(w * 0.78f, h * 0.82f)
+                    close()
+                }
+                drawPath(p, tint)
+            }
+            "directory" -> {
+                drawRect(tint, Offset(w * 0.10f, h * 0.20f), Size(w * 0.14f, h * 0.14f))
+                drawRect(tint, Offset(w * 0.34f, h * 0.20f), Size(w * 0.56f, h * 0.14f))
+                drawRect(tint, Offset(w * 0.10f, h * 0.43f), Size(w * 0.14f, h * 0.14f))
+                drawRect(tint, Offset(w * 0.34f, h * 0.43f), Size(w * 0.56f, h * 0.14f))
+                drawRect(tint, Offset(w * 0.10f, h * 0.66f), Size(w * 0.14f, h * 0.14f))
+                drawRect(tint, Offset(w * 0.34f, h * 0.66f), Size(w * 0.56f, h * 0.14f))
             }
             "search" -> {
                 // magnifying glass: a ring and a short handle
