@@ -283,17 +283,21 @@ fun RadioScreen() {
             .take(25)
             .map { e -> e.key.replaceFirstChar { ch -> ch.uppercase() } }
     }
-    val stations = allStations.filter { s ->
-        when (currentTab) {
-            2 -> favoriteIds.contains(s.id)
-            1 -> {
-                val q = searchQuery.trim()
-                q.isNotBlank() && s.name.contains(q, ignoreCase = true)
+    val stations = remember(allStations, currentTab, selectedState, searchQuery, favoriteIds) {
+        allStations.filter { s ->
+            when (currentTab) {
+                2 -> favoriteIds.contains(s.id)
+                1 -> {
+                    val q = searchQuery.trim()
+                    q.isNotBlank() && s.name.contains(q, ignoreCase = true)
+                }
+                else -> selectedState.startsWith("All") ||
+                        s.state.equals(selectedState, ignoreCase = true)
             }
-
-            else -> selectedState.startsWith("All") ||
-                    s.state.equals(selectedState, ignoreCase = true)
-        }
+        }.sortedWith(
+            compareBy<Station> { !it.online }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name.trim() }
+        )
     }
 
     fun play(station: Station) {
