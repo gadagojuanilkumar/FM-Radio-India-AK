@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -35,6 +36,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -135,7 +137,18 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             FMRadioIndiaAKTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    MaterialTheme.colorScheme.background,
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            )
+                        )
+                ) {
                     RadioScreen()
                 }
             }
@@ -750,13 +763,32 @@ fun RadioScreen() {
         )
     }
     Scaffold(
+        containerColor = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         topBar = {
-            TopAppBar(
-                title = { Text("FM Radio - Bhoogolam") },
-                actions = {
-                    TextButton(onClick = { openNearMe() }) { Text("Near me") }
-                }
-            )
+            val placeText = if (selectedState.startsWith("All")) {
+                selectedCountry.name
+            } else {
+                selectedState + ", " + selectedCountry.name
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Bhoogolam Live FM",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                LiveBadge()
+                Spacer(modifier = Modifier.weight(1f))
+                LocationChip(text = placeText, onClick = { openNearMe() })
+            }
         },
         bottomBar = {
             Column {
@@ -848,7 +880,7 @@ fun RadioScreen() {
                         ) { ControlIcon("next", barTint, Modifier.size(26.dp)) }
                     }
                 }
-                NavigationBar {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     val tabs = listOf(
                         "Home" to "home",
                         "Search" to "search",
@@ -863,14 +895,19 @@ fun RadioScreen() {
                                 ControlIcon(
                                     kind,
                                     if (currentTab == index) {
-                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                        MaterialTheme.colorScheme.primary
                                     } else {
                                         MaterialTheme.colorScheme.onSurfaceVariant
                                     },
                                     Modifier.size(24.dp)
                                 )
                             },
-                            label = { Text(label) }
+                            label = { Text(label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                indicatorColor = Color.Transparent
+                            )
                         )
                     }
                 }
@@ -1399,6 +1436,27 @@ fun ControlIcon(kind: String, tint: Color, modifier: Modifier = Modifier.size(32
                 drawRect(tint, Offset(w * 0.10f, h * 0.66f), Size(w * 0.14f, h * 0.14f))
                 drawRect(tint, Offset(w * 0.34f, h * 0.66f), Size(w * 0.56f, h * 0.14f))
             }
+            "globe" -> {
+                val sw = w * 0.09f
+                drawCircle(
+                    color = tint,
+                    radius = w * 0.4f,
+                    center = Offset(w * 0.5f, h * 0.5f),
+                    style = Stroke(width = sw)
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(w * 0.1f, h * 0.5f),
+                    end = Offset(w * 0.9f, h * 0.5f),
+                    strokeWidth = sw
+                )
+                drawOval(
+                    color = tint,
+                    topLeft = Offset(w * 0.33f, h * 0.1f),
+                    size = Size(w * 0.34f, h * 0.8f),
+                    style = Stroke(width = sw)
+                )
+            }
             "search" -> {
                 // magnifying glass: a ring and a short handle
                 drawCircle(
@@ -1738,7 +1796,7 @@ fun WaveBars(active: Boolean, modifier: Modifier = Modifier) {
             }
             val h = size.height * level
             val x = i * gap + (gap - barW) / 2
-            val color = lerp(Color(0xFF22D3EE), Color(0xFFFF8A00), i / (count - 1f))
+            val color = lerp(Color(0xFF4FC3F7), Color(0xFF81D4FA), i / (count - 1f))
             drawRoundRect(
                 color = color,
                 topLeft = Offset(x, size.height - h),
@@ -1771,7 +1829,7 @@ fun GlowFrame(active: Boolean, content: @Composable () -> Unit) {
                 .clip(RoundedCornerShape(40.dp))
                 .background(
                     Brush.linearGradient(
-                        listOf(Color(0xFF22D3EE), Color(0xFF7B2FF7), Color(0xFFFF8A00))
+                        listOf(Color(0xFF4FC3F7), Color(0xFF1E88E5), Color(0xFF81D4FA))
                     )
                 )
         )
@@ -1844,7 +1902,7 @@ fun NowPlayingDialog(
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color(0xCC0B1030), Color(0xE61B1448), Color(0xF20B0A24))
+                            listOf(Color(0xCC0B1030), Color(0xE6123B63), Color(0xF2071626))
                         )
                     )
             )
@@ -1895,7 +1953,7 @@ fun NowPlayingDialog(
                     Surface(
                         shape = RoundedCornerShape(28.dp),
                         shadowElevation = 20.dp,
-                        color = Color(0xFF1E1A4D)
+                        color = Color(0xFF16406B)
                     ) {
                         Box(
                             modifier = Modifier
@@ -1996,7 +2054,7 @@ fun NowPlayingDialog(
                             .clip(CircleShape)
                             .background(
                                 Brush.linearGradient(
-                                    listOf(Color(0xFF22D3EE), Color(0xFF7B2FF7))
+                                    listOf(Color(0xFF4FC3F7), Color(0xFF1E88E5))
                                 )
                             )
                             .border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape)
@@ -2079,3 +2137,67 @@ fun DataUsageRow() {
         }) { Text("Reset") }
     }
 }
+
+            // Red "LIVE" pill that softly pulses
+            @Composable
+            fun LiveBadge() {
+                val transition = rememberInfiniteTransition(label = "live")
+                val glow by transition.animateFloat(
+                    initialValue = 0.35f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+                    label = "glow"
+                )
+                val red = Color(0xFFFF2D55)
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(red.copy(alpha = 0.22f))
+                        .border(1.dp, red.copy(alpha = glow), RoundedCornerShape(50))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(red.copy(alpha = glow))
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = "LIVE",
+                        color = red,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // Rounded chip showing where you are; tap it to open "Near me"
+            @Composable
+            fun LocationChip(text: String, onClick: () -> Unit) {
+                Row(
+                    modifier = Modifier
+                        .widthIn(max = 170.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.08f))
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.18f),
+                            RoundedCornerShape(50)
+                        )
+                        .clickable { onClick() }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = text,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    ControlIcon("globe", MaterialTheme.colorScheme.primary, Modifier.size(16.dp))
+                }
+            }
