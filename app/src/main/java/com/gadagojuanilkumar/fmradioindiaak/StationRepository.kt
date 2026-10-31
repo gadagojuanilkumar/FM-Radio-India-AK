@@ -58,11 +58,41 @@ object StationRepository {
         }
     }
 
-    private val servers = listOf(
+    // True when the last big download failed on every server (used for a clearer message)
+    @Volatile
+    var lastFetchFailed = false
+
+    // Used only if the live server list cannot be loaded
+    private val fallbackServers = listOf(
         "https://de1.api.radio-browser.info",
+        "https://nl1.api.radio-browser.info",
+        "https://at1.api.radio-browser.info",
         "https://de2.api.radio-browser.info",
         "https://fi1.api.radio-browser.info"
     )
+    private var discoveredServers: List<String>? = null
+
+    // Radio Browser changes its server names from time to time, so ask it which
+    // servers are available now, and keep the fixed list as a backup.
+    private fun servers(): List<String> {
+        val found = discoveredServers ?: try {
+            val text = cachedText("servers.json", DAY) {
+                download("https://all.api.radio-browser.info/json/servers", 10000)
+            }
+            val list = mutableListOf<String>()
+            if (text != null) {
+                val array = JSONArray(text)
+                for (i in 0 until array.length()) {
+                    val name = array.getJSONObject(i).optString("name")
+                    if (name.isNotBlank()) list.add("https://$name")
+                }
+            }
+            list.distinct().shuffled().also { if (it.isNotEmpty()) discoveredServers = it }
+        } catch (e: Exception) {
+            emptyList()
+        }
+        return (found + fallbackServers).distinct()
+    }
 
     suspend fun fetchByState(state: String): List<Station> {
         val encodedState = URLEncoder.encode(state, "UTF-8")
@@ -192,7 +222,7 @@ object StationRepository {
         return if (bestScore >= 4) best else null
     }
     suspend fun fetchCountries(): List<Country> = withContext(Dispatchers.IO) {
-        for (server in servers) {
+        for (server in servers()) {
             try {
                 val address = server + "/json/countries?hidebroken=false" +
                         "&order=stationcount&reverse=true"
@@ -239,11 +269,12 @@ object StationRepository {
                     try { return@withContext parse(cached, fallbackState) } catch (e: Exception) { }
                 }
             }
-            for (server in servers) {
+            for (server in servers()) {
                 try {
                     val text = download(server + path, 40000)
                     val result = parse(text, fallbackState)
                     if (ttlMs > 0) writeCache(cacheName, text)
+                    lastFetchFailed = false
                     return@withContext result
                 } catch (e: Exception) {
                     // Try the next server
@@ -252,9 +283,14 @@ object StationRepository {
             // Offline: use older saved data if we have it
             if (ttlMs > 0) {
                 readCache(cacheName, Long.MAX_VALUE)?.let { old ->
-                    try { return@withContext parse(old, fallbackState) } catch (e: Exception) { }
+                    try {
+                        val result = parse(old, fallbackState)
+                        lastFetchFailed = false
+                        return@withContext result
+                    } catch (e: Exception) { }
                 }
             }
+            lastFetchFailed = true
             emptyList()
         }
 

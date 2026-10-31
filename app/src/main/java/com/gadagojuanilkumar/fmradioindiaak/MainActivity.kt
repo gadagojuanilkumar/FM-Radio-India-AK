@@ -174,6 +174,8 @@ fun RadioScreen() {
     var languageMenuOpen by remember { mutableStateOf(false) }
     var favoriteIds by remember { mutableStateOf(FavoritesStore.load(context)) }
     var favoritesOnly by remember { mutableStateOf(false) }
+    var libraryMode by remember { mutableStateOf(0) }
+    var recentStations by remember { mutableStateOf(RecentStore.load(context)) }
     var showPlayer by remember { mutableStateOf(false) }
     var countries by remember { mutableStateOf<List<Country>>(emptyList()) }
     var selectedCountry by remember { mutableStateOf(Country("India", "IN", 0)) }
@@ -283,26 +285,33 @@ fun RadioScreen() {
             .take(25)
             .map { e -> e.key.replaceFirstChar { ch -> ch.uppercase() } }
     }
-    val stations = remember(allStations, currentTab, selectedState, searchQuery, favoriteIds) {
-        allStations.filter { s ->
-            when (currentTab) {
-                2 -> favoriteIds.contains(s.id)
-                1 -> {
-                    val q = searchQuery.trim()
-                    q.isNotBlank() && s.name.contains(q, ignoreCase = true)
+    val stations = remember(
+        allStations, currentTab, selectedState, searchQuery, favoriteIds, libraryMode, recentStations
+    ) {
+        if (currentTab == 2 && libraryMode == 1) {
+            recentStations
+        } else {
+            allStations.filter { s ->
+                when (currentTab) {
+                    2 -> favoriteIds.contains(s.id)
+                    1 -> {
+                        val q = searchQuery.trim()
+                        q.isNotBlank() && s.name.contains(q, ignoreCase = true)
+                    }
+                    else -> selectedState.startsWith("All") ||
+                            s.state.equals(selectedState, ignoreCase = true)
                 }
-                else -> selectedState.startsWith("All") ||
-                        s.state.equals(selectedState, ignoreCase = true)
-            }
-        }.sortedWith(
-            compareBy<Station> { !it.online }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name.trim() }
-        )
+            }.sortedWith(
+                compareBy<Station> { !it.online }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name.trim() }
+            )
+        }
     }
 
     fun play(station: Station) {
         val c = controller ?: return
         currentStation = station
+        recentStations = RecentStore.add(context, station)
         playbackError = ""
         songTitle = ""
         c.stop()
@@ -1047,6 +1056,41 @@ fun RadioScreen() {
                 }
             }
             if (currentTab == 2) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (libraryMode == 0) {
+                        Button(
+                            onClick = { libraryMode = 0 },
+                            shape = RoundedCornerShape(50)
+                        ) { Text("Favorites") }
+                        OutlinedButton(
+                            onClick = { libraryMode = 1 },
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) { Text("Recent") }
+                    } else {
+                        OutlinedButton(
+                            onClick = { libraryMode = 0 },
+                            shape = RoundedCornerShape(50)
+                        ) { Text("Favorites") }
+                        Button(
+                            onClick = { libraryMode = 1 },
+                            shape = RoundedCornerShape(50),
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) { Text("Recent") }
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    if (libraryMode == 1 && recentStations.isNotEmpty()) {
+                        TextButton(onClick = {
+                            RecentStore.clear(context)
+                            recentStations = emptyList()
+                        }) { Text("Clear") }
+                    }
+                }
                 DataUsageRow()
             }
             if (loading) {
@@ -1060,12 +1104,17 @@ fun RadioScreen() {
                             text = when {
                                 allStations.isEmpty() && !isOnline(context) ->
                                     "No internet connection.\nConnect and try again."
+                                allStations.isEmpty() && StationRepository.lastFetchFailed ->
+                                    "Could not reach the station service.\nPlease try again in a moment."
 
                                 currentTab == 1 && searchQuery.isBlank() ->
                                     "Type a station name and tap the search icon."
 
                                 currentTab == 1 ->
                                     "No stations match \"$searchQuery\""
+
+                                currentTab == 2 && libraryMode == 1 ->
+                                    "Nothing played yet.\nStations you listen to will appear here."
 
                                 currentTab == 2 ->
                                     "No favorites yet.\nTap the heart on a station to save it here."
