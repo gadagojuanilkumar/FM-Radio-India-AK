@@ -779,15 +779,11 @@ fun RadioScreen() {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Bhoogolam Live FM",
+                    text = "FM Radio - Bhoogolam",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                LiveBadge()
-                Spacer(modifier = Modifier.weight(1f))
-                LocationChip(text = placeText, onClick = { openNearMe() })
             }
         },
         bottomBar = {
@@ -1999,12 +1995,6 @@ fun NowPlayingDialog(
                                     .clip(CircleShape)
                                     .background(Color(0xFFFF3B30))
                             )
-                            Text(
-                                text = "  LIVE",
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold
-                            )
                         }
                     }
                     if (station.state.isNotBlank()) InfoChip(station.state)
@@ -2138,40 +2128,6 @@ fun DataUsageRow() {
     }
 }
 
-            // Red "LIVE" pill that softly pulses
-            @Composable
-            fun LiveBadge() {
-                val transition = rememberInfiniteTransition(label = "live")
-                val glow by transition.animateFloat(
-                    initialValue = 0.35f,
-                    targetValue = 1f,
-                    animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-                    label = "glow"
-                )
-                val red = Color(0xFFFF2D55)
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(red.copy(alpha = 0.22f))
-                        .border(1.dp, red.copy(alpha = glow), RoundedCornerShape(50))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(red.copy(alpha = glow))
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = "LIVE",
-                        color = red,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
 
             // Rounded chip showing where you are; tap it to open "Near me"
             @Composable
