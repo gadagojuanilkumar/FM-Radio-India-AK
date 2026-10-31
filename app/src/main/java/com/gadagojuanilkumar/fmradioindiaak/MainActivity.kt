@@ -13,6 +13,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -141,14 +143,18 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun RadioScreen() {
     val context = LocalContext.current
     val settings = remember { context.getSharedPreferences("settings", Context.MODE_PRIVATE) }
 
 
-    var selectedState by remember { mutableStateOf("All India") }
+    // The app opens with the state it found last time, then checks the location again
+    var selectedState by remember {
+        mutableStateOf(settings.getString("last_state", "All India") ?: "All India")
+    }
+    var locationNote by remember { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var allStations by remember { mutableStateOf<List<Station>>(emptyList()) }
@@ -178,7 +184,15 @@ fun RadioScreen() {
     var recentStations by remember { mutableStateOf(RecentStore.load(context)) }
     var showPlayer by remember { mutableStateOf(false) }
     var countries by remember { mutableStateOf<List<Country>>(emptyList()) }
-    var selectedCountry by remember { mutableStateOf(Country("India", "IN", 0)) }
+    var selectedCountry by remember {
+        mutableStateOf(
+            Country(
+                settings.getString("last_country_name", "India") ?: "India",
+                settings.getString("last_country_code", "IN") ?: "IN",
+                0
+            )
+        )
+    }
     var countryMenuOpen by remember { mutableStateOf(false) }
     var showCountryPicker by remember { mutableStateOf(false) }
     var countryQuery by remember { mutableStateOf("") }
@@ -301,10 +315,7 @@ fun RadioScreen() {
                     else -> selectedState.startsWith("All") ||
                             s.state.equals(selectedState, ignoreCase = true)
                 }
-            }.sortedWith(
-                compareBy<Station> { !it.online }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name.trim() }
-            )
+            }.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name.trim() })
         }
     }
 
@@ -446,15 +457,22 @@ fun RadioScreen() {
     // Picks the country and state from the phone's location
     fun autoDetectRegion() {
         scope.launch {
-            val loc = LocationHelper.currentLocation(context) ?: return@launch
+            locationNote = "Finding your location..."
+            val loc = LocationHelper.currentLocation(context)
+            if (loc == null) {
+                locationNote = "Could not get your location. Turn on Location in your phone settings."
+                return@launch
+            }
             val place = LocationHelper.describe(context, loc)
             val code = place.countryCode.uppercase()
-            if (code.isBlank()) return@launch
+            if (code.isBlank()) {
+                locationNote = "Could not find your country. Check your internet and try again."
+                return@launch
+            }
             if (code != selectedCountry.code) {
                 selectedCountry = Country(place.countryName.ifBlank { code }, code, 0)
                 selectedState = if (code == "IN") "All India" else "All regions"
             }
-
             if (code == "IN") {
                 val region = place.region
                 val match = IndianStates.all.firstOrNull { st ->
@@ -464,8 +482,20 @@ fun RadioScreen() {
                                     region.contains(st, ignoreCase = true)
                             )
                 }
-                if (match != null) selectedState = match
+                if (match == null) {
+                    locationNote = "Could not match your area (" +
+                            region.ifBlank { "unknown" } + ") to a state. Pick a state below."
+                    return@launch
+                }
+                selectedState = match
             }
+            // Remember it, so the app opens in the right place next time
+            settings.edit()
+                .putString("last_country_code", selectedCountry.code)
+                .putString("last_country_name", selectedCountry.name)
+                .putString("last_state", selectedState)
+                .apply()
+            locationNote = ""
         }
     }
 
@@ -485,14 +515,17 @@ fun RadioScreen() {
                 ) == PackageManager.PERMISSION_GRANTED
         if (granted) {
             autoDetectRegion()
-        } else if (!settings.getBoolean("location_asked", false)) {
-            settings.edit().putBoolean("location_asked", true).apply()
-            autoLocationLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                    Manifest.permission.ACCESS_FINE_LOCATION
+        } else {
+            locationNote = "Allow location to show the stations for your state."
+            if (!settings.getBoolean("location_asked", false)) {
+                settings.edit().putBoolean("location_asked", true).apply()
+                autoLocationLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    )
                 )
-            )
+            }
         }
     }
     fun playRelative(step: Int) {
@@ -757,7 +790,8 @@ fun RadioScreen() {
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Clip,
+                                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                                 )
                                 Text(
                                     text = if (current == null) {
@@ -1025,6 +1059,47 @@ fun RadioScreen() {
                     }
                 }
             }
+            if (currentTab == 0 && locationNote.isNotBlank()) {
+                val locationAllowed =
+                    ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED ||
+                            ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.ACCESS_FINE_LOCATION
+                            ) == PackageManager.PERMISSION_GRANTED
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = locationNote,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (!locationAllowed) {
+                        TextButton(onClick = {
+                            autoLocationLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                                    Manifest.permission.ACCESS_FINE_LOCATION
+                                )
+                            )
+                        }) { Text("Allow") }
+                        TextButton(onClick = {
+                            context.startActivity(
+                                android.content.Intent(
+                                    android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    android.net.Uri.parse("package:" + context.packageName)
+                                )
+                            )
+                        }) { Text("Settings") }
+                    } else {
+                        TextButton(onClick = { autoDetectRegion() }) { Text("Retry") }
+                    }
+                }
+            }
             if (currentTab == 1) {
                 Row(
                     modifier = Modifier
@@ -1159,6 +1234,7 @@ fun RadioScreen() {
         }
     }
 }
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun StationRow(
     station: Station,
@@ -1226,7 +1302,8 @@ fun StationRow(
                     .joinToString(" - "),
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Clip,
+                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
             )
             if (station.bitrate > 0) {
                 Text(
