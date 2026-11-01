@@ -97,6 +97,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -707,7 +708,6 @@ fun RadioScreen() {
                                         isFavorite = favoriteIds.contains(s.id),
                                         onToggleFavorite = { toggleFavorite(s) }
                                     )
-                                    HorizontalDivider()
                                 }
                             }
                             if (nearClosest.isNotEmpty()) {
@@ -729,7 +729,6 @@ fun RadioScreen() {
                                         isFavorite = favoriteIds.contains(s.id),
                                         onToggleFavorite = { toggleFavorite(s) }
                                     )
-                                    HorizontalDivider()
                                 }
                             }
                         }
@@ -766,24 +765,26 @@ fun RadioScreen() {
         containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         topBar = {
-            val placeText = if (selectedState.startsWith("All")) {
-                selectedCountry.name
-            } else {
-                selectedState + ", " + selectedCountry.name
-            }
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = "FM Radio - Bhoogolam",
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
                     maxLines = 1
                 )
+                // Opens "Near me" (delete these 6 lines if you do not want this button)
+                IconButton(
+                    onClick = { openNearMe() },
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                ) {
+                    ControlIcon("globe", MaterialTheme.colorScheme.primary, Modifier.size(24.dp))
+                }
             }
         },
         bottomBar = {
@@ -1260,7 +1261,6 @@ fun RadioScreen() {
                             isFavorite = favoriteIds.contains(station.id),
                             onToggleFavorite = { toggleFavorite(station) }
                         )
-                        HorizontalDivider()
                     }
                 }
             }
@@ -1275,6 +1275,9 @@ fun StationRow(
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {}
 ) {
+    val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    val cardColor = if (isLight) Color.White.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.07f)
+    val cardBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     val placeholder: @Composable () -> Unit = {
         Box(
             modifier = Modifier
@@ -1291,6 +1294,10 @@ fun StationRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 5.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(cardColor)
+            .border(1.dp, cardBorder, RoundedCornerShape(16.dp))
             .clickable { onClick() }
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1298,7 +1305,7 @@ fun StationRow(
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
             if (station.logoUrl.startsWith("http")) {
@@ -1350,6 +1357,7 @@ fun StationRow(
         TextButton(onClick = onToggleFavorite) {
             Text(
                 text = if (isFavorite) "\u2665" else "\u2661",
+                color = if (isFavorite) Color(0xFFFF4D6D) else MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.headlineSmall
             )
         }
@@ -1510,6 +1518,7 @@ fun NowPlayingDialogOld(
                     TextButton(onClick = onToggleFavorite) {
                         Text(
                             text = if (isFavorite) "\u2665" else "\u2661",
+                            color = if (isFavorite) Color(0xFFFF4D6D) else MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.headlineSmall
                         )
                     }
@@ -1692,6 +1701,7 @@ fun NowPlayingDialogV2(
                     TextButton(onClick = onToggleFavorite) {
                         Text(
                             text = if (isFavorite) "\u2665" else "\u2661",
+                            color = if (isFavorite) Color(0xFFFF4D6D) else MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.headlineSmall
                         )
                     }
