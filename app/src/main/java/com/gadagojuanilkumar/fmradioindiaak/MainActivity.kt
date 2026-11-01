@@ -830,9 +830,8 @@ fun RadioScreen() {
                                     text = current?.name ?: "Pick a station",
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Clip,
-                                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
                                     text = if (current == null) {
@@ -851,7 +850,7 @@ fun RadioScreen() {
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    maxLines = 1,
+                                    maxLines = 3,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -2069,7 +2068,7 @@ fun NowPlayingDialog(
                         color = Color.White.copy(alpha = 0.85f),
                         style = MaterialTheme.typography.bodyLarge,
                         textAlign = TextAlign.Center,
-                        maxLines = 2,
+                        maxLines = 4,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
