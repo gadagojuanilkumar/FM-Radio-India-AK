@@ -98,6 +98,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
@@ -891,40 +895,39 @@ fun RadioScreen() {
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     val tabs = listOf(
                         "Home" to "home",
-                        "Search" to "search",
-                        "Library" to "library",
+                        "Explore" to "explore",
+                        "My Radio" to "myradio",
                         "Directory" to "directory"
                     )
                     tabs.forEachIndexed { index, (label, kind) ->
-                        val lineColor = MaterialTheme.colorScheme.primary
                         NavigationBarItem(
                             selected = currentTab == index,
                             onClick = { currentTab = index },
-                            modifier = Modifier.drawBehind {
-                                if (currentTab == index) {
-                                    drawRect(
-                                        color = lineColor,
-                                        topLeft = Offset(size.width * 0.25f, 0f),
-                                        size = Size(size.width * 0.5f, 3.dp.toPx())
-                                    )
-                                }
-                            },
                             icon = {
                                 ControlIcon(
                                     kind,
                                     if (currentTab == index) {
-                                        MaterialTheme.colorScheme.primary
+                                        MaterialTheme.colorScheme.onSecondaryContainer
                                     } else {
                                         MaterialTheme.colorScheme.onSurfaceVariant
                                     },
                                     Modifier.size(24.dp)
                                 )
                             },
-                            label = { Text(label) },
+                            label = {
+                                Text(
+                                    text = label,
+                                    fontWeight = if (currentTab == index) {
+                                        FontWeight.Bold
+                                    } else {
+                                        FontWeight.Normal
+                                    }
+                                )
+                            },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
                                 unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                indicatorColor = Color.Transparent
+                                indicatorColor = MaterialTheme.colorScheme.secondaryContainer
                             )
                         )
                     }
@@ -1238,7 +1241,7 @@ fun RadioScreen() {
                                     "Could not reach the station service.\nPlease try again in a moment."
 
                                 currentTab == 1 && searchQuery.isBlank() ->
-                                    "Type a station name and tap the search icon."
+                                    "Type a station name and press Enter on your keyboard."
 
                                 currentTab == 1 ->
                                     "No stations match \"$searchQuery\""
@@ -1474,14 +1477,16 @@ fun ControlIcon(kind: String, tint: Color, modifier: Modifier = Modifier.size(32
                 drawPath(p, tint)
             }
             "directory" -> {
-                drawRect(tint, Offset(w * 0.10f, h * 0.20f), Size(w * 0.14f, h * 0.14f))
-                drawRect(tint, Offset(w * 0.34f, h * 0.20f), Size(w * 0.56f, h * 0.14f))
-                drawRect(tint, Offset(w * 0.10f, h * 0.43f), Size(w * 0.14f, h * 0.14f))
-                drawRect(tint, Offset(w * 0.34f, h * 0.43f), Size(w * 0.56f, h * 0.14f))
-                drawRect(tint, Offset(w * 0.10f, h * 0.66f), Size(w * 0.14f, h * 0.14f))
-                drawRect(tint, Offset(w * 0.34f, h * 0.66f), Size(w * 0.56f, h * 0.14f))
+                drawRoundRect(
+                    tint, Offset(w * 0.12f, h * 0.16f), Size(w * 0.76f, h * 0.22f),
+                    CornerRadius(w * 0.05f, w * 0.05f)
+                )
+                drawRoundRect(
+                    tint, Offset(w * 0.18f, h * 0.44f), Size(w * 0.64f, h * 0.40f),
+                    CornerRadius(w * 0.05f, w * 0.05f)
+                )
             }
-            "globe" -> {
+            "explore" -> {
                 val sw = w * 0.09f
                 drawCircle(
                     color = tint,
@@ -1489,32 +1494,49 @@ fun ControlIcon(kind: String, tint: Color, modifier: Modifier = Modifier.size(32
                     center = Offset(w * 0.5f, h * 0.5f),
                     style = Stroke(width = sw)
                 )
-                drawLine(
+                val needle = Path().apply {
+                    moveTo(w * 0.70f, h * 0.30f)
+                    lineTo(w * 0.56f, h * 0.56f)
+                    lineTo(w * 0.30f, h * 0.70f)
+                    lineTo(w * 0.44f, h * 0.44f)
+                    close()
+                }
+                drawPath(needle, tint)
+            }
+            "myradio" -> {
+                val sw = w * 0.08f
+                drawRoundRect(
                     color = tint,
-                    start = Offset(w * 0.1f, h * 0.5f),
-                    end = Offset(w * 0.9f, h * 0.5f),
-                    strokeWidth = sw
-                )
-                drawOval(
-                    color = tint,
-                    topLeft = Offset(w * 0.33f, h * 0.1f),
-                    size = Size(w * 0.34f, h * 0.8f),
+                    topLeft = Offset(w * 0.1f, h * 0.3f),
+                    size = Size(w * 0.8f, h * 0.58f),
+                    cornerRadius = CornerRadius(w * 0.12f, w * 0.12f),
                     style = Stroke(width = sw)
                 )
-            }
-            "search" -> {
-                // magnifying glass: a ring and a short handle
+                drawLine(
+                    color = tint,
+                    start = Offset(w * 0.3f, h * 0.3f),
+                    end = Offset(w * 0.7f, h * 0.1f),
+                    strokeWidth = sw,
+                    cap = StrokeCap.Round
+                )
                 drawCircle(
                     color = tint,
-                    radius = w * 0.28f,
-                    center = Offset(w * 0.42f, h * 0.42f),
-                    style = Stroke(width = w * 0.1f)
+                    radius = w * 0.14f,
+                    center = Offset(w * 0.34f, h * 0.59f),
+                    style = Stroke(width = sw)
                 )
                 drawLine(
                     color = tint,
-                    start = Offset(w * 0.64f, h * 0.64f),
-                    end = Offset(w * 0.88f, h * 0.88f),
-                    strokeWidth = w * 0.12f,
+                    start = Offset(w * 0.6f, h * 0.5f),
+                    end = Offset(w * 0.76f, h * 0.5f),
+                    strokeWidth = sw,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = tint,
+                    start = Offset(w * 0.6f, h * 0.68f),
+                    end = Offset(w * 0.76f, h * 0.68f),
+                    strokeWidth = sw,
                     cap = StrokeCap.Round
                 )
             }
