@@ -98,6 +98,17 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -774,6 +785,7 @@ fun RadioScreen() {
             ) {
                 Text(
                     text = "FM Radio - Bhoogolam",
+                    fontFamily = Calibri,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
@@ -885,9 +897,19 @@ fun RadioScreen() {
                         "Directory" to "directory"
                     )
                     tabs.forEachIndexed { index, (label, kind) ->
+                        val lineColor = MaterialTheme.colorScheme.primary
                         NavigationBarItem(
                             selected = currentTab == index,
                             onClick = { currentTab = index },
+                            modifier = Modifier.drawBehind {
+                                if (currentTab == index) {
+                                    drawRect(
+                                        color = lineColor,
+                                        topLeft = Offset(size.width * 0.25f, 0f),
+                                        size = Size(size.width * 0.5f, 3.dp.toPx())
+                                    )
+                                }
+                            },
                             icon = {
                                 ControlIcon(
                                     kind,
@@ -931,7 +953,7 @@ fun RadioScreen() {
                     .fillMaxSize()
             ) {
                 Box(modifier = Modifier.padding(12.dp)) {
-                    OutlinedButton(onClick = { directoryMenuOpen = true }) {
+                    FilledTonalButton(onClick = { menuOpen = true }) {
                         Text("State: $directoryState")
                     }
                     DropdownMenu(
@@ -1021,7 +1043,7 @@ fun RadioScreen() {
                 Box(modifier = Modifier.padding(12.dp)) {
                     Row {
                         Box {
-                            OutlinedButton(
+                            FilledTonalButton(
                                 onClick = { showCountryPicker = true },
                                 modifier = Modifier.widthIn(max = 170.dp)
                             ) {
@@ -1062,7 +1084,7 @@ fun RadioScreen() {
                             }
                         }
                         Spacer(modifier = Modifier.width(8.dp))
-                        OutlinedButton(onClick = { menuOpen = true }) {
+                        FilledTonalButton(onClick = { menuOpen = true }) {
                             Text(
                                 text = "State: $selectedState",
                                 maxLines = 1,
@@ -1259,7 +1281,8 @@ fun RadioScreen() {
                             station = station,
                             onClick = { play(station) },
                             isFavorite = favoriteIds.contains(station.id),
-                            onToggleFavorite = { toggleFavorite(station) }
+                            onToggleFavorite = { toggleFavorite(station) },
+                            isCurrent = station.id == currentStation?.id
                         )
                     }
                 }
@@ -1273,31 +1296,50 @@ fun StationRow(
     station: Station,
     onClick: () -> Unit,
     isFavorite: Boolean = false,
-    onToggleFavorite: () -> Unit = {}
+    onToggleFavorite: () -> Unit = {},
+    isCurrent: Boolean = false
 ) {
+    val offline = !station.online
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
-    val cardColor = if (isLight) Color.White.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.07f)
-    val cardBorder = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+    val shape = RoundedCornerShape(18.dp)
+    val cardColor = when {
+        offline && isLight -> Color(0xFFDADDE0).copy(alpha = 0.75f)
+        offline -> Color.White.copy(alpha = 0.04f)
+        isLight -> Color(0xFFF7F5F0)
+        else -> Color.White.copy(alpha = 0.07f)
+    }
+    val titleColor = if (offline) {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    val subColor = if (offline) {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val grayFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
     val placeholder: @Composable () -> Unit = {
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .background(MaterialTheme.colorScheme.primaryContainer),
+                .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = station.name.take(1).uppercase(),
-                style = MaterialTheme.typography.titleLarge
+                style = MaterialTheme.typography.titleLarge,
+                color = titleColor
             )
         }
     }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 5.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .shadow(if (offline) 0.dp else 4.dp, shape)
+            .clip(shape)
             .background(cardColor)
-            .border(1.dp, cardBorder, RoundedCornerShape(16.dp))
             .clickable { onClick() }
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1305,14 +1347,15 @@ fun StationRow(
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (isLight) Color.White else MaterialTheme.colorScheme.surfaceVariant)
         ) {
             if (station.logoUrl.startsWith("http")) {
                 SubcomposeAsyncImage(
                     model = station.logoUrl,
                     contentDescription = station.name,
                     contentScale = ContentScale.Fit,
+                    colorFilter = if (offline) grayFilter else null,
                     modifier = Modifier.size(56.dp),
                     loading = { placeholder() },
                     error = { placeholder() }
@@ -1329,35 +1372,34 @@ fun StationRow(
             Text(
                 text = station.name,
                 style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                color = titleColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
+            val details = buildAnnotatedString {
+                val parts = listOf(station.state, station.language).filter { it.isNotBlank() }
+                append(parts.joinToString(" - "))
+                if (offline) {
+                    if (parts.isNotEmpty()) append(" - ")
+                    withStyle(SpanStyle(textDecoration = TextDecoration.LineThrough)) {
+                        append("OFFLINE")
+                    }
+                }
+            }
             Text(
-                text = listOf(
-                    station.state,
-                    station.language,
-                    if (station.online) "" else "listed offline"
-                )
-                    .filter { it.isNotBlank() }
-                    .joinToString(" - "),
+                text = details,
                 style = MaterialTheme.typography.bodySmall,
+                color = subColor,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
                 modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
             )
-            if (station.bitrate > 0) {
-                Text(
-                    text = "${station.bitrate} kbps - about ${mbPerHour(station.bitrate)} MB per hour",
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
         }
         TextButton(onClick = onToggleFavorite) {
             Text(
                 text = if (isFavorite) "\u2665" else "\u2661",
-                color = if (isFavorite) Color(0xFFFF4D6D) else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isFavorite) MaterialTheme.colorScheme.primary else subColor,
                 style = MaterialTheme.typography.headlineSmall
             )
         }
@@ -2167,3 +2209,7 @@ fun DataUsageRow() {
                     ControlIcon("globe", MaterialTheme.colorScheme.primary, Modifier.size(16.dp))
                 }
             }
+
+// Title font: put the font file in app/src/main/res/font/ with this exact name
+// This uses Carlito Bold as a metric-compatible, open-source replacement for Calibri Bold.
+val Calibri = FontFamily(Font(R.font.calibri_bold, FontWeight.Bold))
