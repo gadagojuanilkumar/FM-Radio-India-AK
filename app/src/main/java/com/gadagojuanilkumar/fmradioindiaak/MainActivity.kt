@@ -70,6 +70,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.geometry.CornerRadius
 import coil.Coil
+import org.maplibre.android.MapLibre
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.disk.DiskCache
@@ -138,6 +139,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         StationRepository.init(applicationContext)
+        MapLibre.getInstance(this)
         Coil.setImageLoader(
             ImageLoader.Builder(applicationContext)
                 // Many station logo servers send "no-cache" headers, which makes the
@@ -894,19 +896,20 @@ fun RadioScreen() {
                 }
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     val tabs = listOf(
-                        "Home" to "home",
-                        "Explore" to "explore",
-                        "My Radio" to "myradio",
-                        "Directory" to "directory"
+                        Triple("Home", "home", 0),
+                        Triple("Explore", "explore", 1),
+                        Triple("Map", "map", 4),
+                        Triple("My Radio", "myradio", 2),
+                        Triple("Directory", "directory", 3)
                     )
-                    tabs.forEachIndexed { index, (label, kind) ->
+                    tabs.forEach { (label, kind, id) ->
                         NavigationBarItem(
-                            selected = currentTab == index,
-                            onClick = { currentTab = index },
+                            selected = currentTab == id,
+                            onClick = { currentTab = id },
                             icon = {
                                 ControlIcon(
                                     kind,
-                                    if (currentTab == index) {
+                                    if (currentTab == id) {
                                         MaterialTheme.colorScheme.onSecondaryContainer
                                     } else {
                                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -917,7 +920,7 @@ fun RadioScreen() {
                             label = {
                                 Text(
                                     text = label,
-                                    fontWeight = if (currentTab == index) {
+                                    fontWeight = if (currentTab == id) {
                                         FontWeight.Bold
                                     } else {
                                         FontWeight.Normal
@@ -935,6 +938,19 @@ fun RadioScreen() {
             }
         }
     ) { padding ->
+        if (currentTab == 4) {
+            MapScreen(
+                stations = allStations,
+                isIndia = selectedCountry.code == "IN",
+                startState = selectedState,
+                favoriteIds = favoriteIds,
+                currentStationId = currentStation?.id,
+                onPlay = { play(it) },
+                onToggleFavorite = { toggleFavorite(it) },
+                modifier = Modifier.padding(padding)
+            )
+            return@Scaffold
+        }
         if (showDirectory) {
             val states = listOf("All India") +
                     directory.map { it.state }.distinct().sorted()
@@ -1485,6 +1501,16 @@ fun ControlIcon(kind: String, tint: Color, modifier: Modifier = Modifier.size(32
                     tint, Offset(w * 0.18f, h * 0.44f), Size(w * 0.64f, h * 0.40f),
                     CornerRadius(w * 0.05f, w * 0.05f)
                 )
+            }
+            "map" -> {
+                drawCircle(color = tint, radius = w * 0.27f, center = Offset(w * 0.5f, h * 0.38f))
+                val tip = Path().apply {
+                    moveTo(w * 0.27f, h * 0.5f)
+                    lineTo(w * 0.73f, h * 0.5f)
+                    lineTo(w * 0.5f, h * 0.92f)
+                    close()
+                }
+                drawPath(tip, tint)
             }
             "explore" -> {
                 val sw = w * 0.09f
