@@ -58,7 +58,6 @@ dependencies {
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.coil.compose)
-    implementation("org.maplibre.gl:android-sdk:11.8.2")
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)

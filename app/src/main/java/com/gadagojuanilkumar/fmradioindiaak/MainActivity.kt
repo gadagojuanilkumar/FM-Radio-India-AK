@@ -70,7 +70,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.geometry.CornerRadius
 import coil.Coil
-import org.maplibre.android.MapLibre
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.disk.DiskCache
@@ -139,7 +138,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         StationRepository.init(applicationContext)
-        MapLibre.getInstance(this)
         Coil.setImageLoader(
             ImageLoader.Builder(applicationContext)
                 // Many station logo servers send "no-cache" headers, which makes the
@@ -898,7 +896,6 @@ fun RadioScreen() {
                     val tabs = listOf(
                         Triple("Home", "home", 0),
                         Triple("Explore", "explore", 1),
-                        Triple("Map", "map", 4),
                         Triple("My Radio", "myradio", 2),
                         Triple("Directory", "directory", 3)
                     )
@@ -938,19 +935,6 @@ fun RadioScreen() {
             }
         }
     ) { padding ->
-        if (currentTab == 4) {
-            MapScreen(
-                stations = allStations,
-                isIndia = selectedCountry.code == "IN",
-                startState = selectedState,
-                favoriteIds = favoriteIds,
-                currentStationId = currentStation?.id,
-                onPlay = { play(it) },
-                onToggleFavorite = { toggleFavorite(it) },
-                modifier = Modifier.padding(padding)
-            )
-            return@Scaffold
-        }
         if (showDirectory) {
             val states = listOf("All India") +
                     directory.map { it.state }.distinct().sorted()
@@ -1175,34 +1159,34 @@ fun RadioScreen() {
                 }
             }
             if (currentTab == 1) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = searchText,
-                        onValueChange = { searchText = it },
-                        label = { Text("Name or frequency, e.g. 91.1") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Button(
-                        onClick = { searchQuery = searchText.trim() },
-                        modifier = Modifier
-                            .padding(start = 8.dp)
-                            .size(52.dp)
-                            .semantics { contentDescription = "Search" },
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
+                val focusManager = LocalFocusManager.current
+                OutlinedTextField(
+                    value = searchText,
+                    onValueChange = {
+                        searchText = it
+                        if (it.isBlank()) searchQuery = ""
+                    },
+                    label = { Text("Search station name") },
+                    leadingIcon = {
                         ControlIcon(
                             "search",
-                            MaterialTheme.colorScheme.onPrimary,
-                            Modifier.size(24.dp)
+                            MaterialTheme.colorScheme.onSurfaceVariant,
+                            Modifier.size(22.dp)
                         )
-                    }
-                }
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            searchQuery = searchText.trim()
+                            focusManager.clearFocus()
+                        }
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                )
             }
             if (currentTab == 2) {
                 Row(
@@ -1501,16 +1485,6 @@ fun ControlIcon(kind: String, tint: Color, modifier: Modifier = Modifier.size(32
                     tint, Offset(w * 0.18f, h * 0.44f), Size(w * 0.64f, h * 0.40f),
                     CornerRadius(w * 0.05f, w * 0.05f)
                 )
-            }
-            "map" -> {
-                drawCircle(color = tint, radius = w * 0.27f, center = Offset(w * 0.5f, h * 0.38f))
-                val tip = Path().apply {
-                    moveTo(w * 0.27f, h * 0.5f)
-                    lineTo(w * 0.73f, h * 0.5f)
-                    lineTo(w * 0.5f, h * 0.92f)
-                    close()
-                }
-                drawPath(tip, tint)
             }
             "explore" -> {
                 val sw = w * 0.09f
