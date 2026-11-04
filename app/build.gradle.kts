@@ -36,7 +36,7 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
             optimization {
-                enable = false
+                enable = true
                 packageScope = setOf("androidx.**", "kotlin.**", "kotlinx.**")
             }
         }
