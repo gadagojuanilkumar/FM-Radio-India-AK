@@ -721,7 +721,8 @@ fun RadioScreen() {
                                         station = s,
                                         onClick = { play(s) },
                                         isFavorite = favoriteIds.contains(s.id),
-                                        onToggleFavorite = { toggleFavorite(s) }
+                                        onToggleFavorite = { toggleFavorite(s) },
+                                        isCurrent = s.id == currentStation?.id
                                     )
                                 }
                             }
@@ -1304,7 +1305,10 @@ fun StationRow(
     val offline = !station.online
     val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
     val shape = RoundedCornerShape(18.dp)
+    val accent = MaterialTheme.colorScheme.primary
     val cardColor = when {
+        isCurrent && isLight -> Color(0xFFBFE0FA)
+        isCurrent -> accent.copy(alpha = 0.22f)
         offline && isLight -> Color(0xFFDADDE0).copy(alpha = 0.75f)
         offline -> Color.White.copy(alpha = 0.04f)
         isLight -> Color(0xFFF7F5F0)
@@ -1339,9 +1343,10 @@ fun StationRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .shadow(if (offline) 0.dp else 4.dp, shape)
+            .shadow(if (isCurrent) 8.dp else if (offline) 0.dp else 4.dp, shape)
             .clip(shape)
             .background(cardColor)
+            .then(if (isCurrent) Modifier.border(2.dp, accent, shape) else Modifier)
             .clickable { onClick() }
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
